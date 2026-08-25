@@ -1,0 +1,8 @@
+.env
+data/chroma_db/
+data/test_chroma/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+.cache/
