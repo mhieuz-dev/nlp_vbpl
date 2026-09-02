@@ -1,5 +1,8 @@
+import re
 import chromadb
 from src.embeddings.embedder import Embedder
+
+_DIEU_RE = re.compile(r"^\s*Điều\s+(\d+)")
 
 class VectorStore:
     def __init__(self, embedder: Embedder, collection_name: str = "vn_legal", persist_dir: str = "./data/chroma_db"):
@@ -37,12 +40,16 @@ class VectorStore:
             include=["documents", "metadatas", "distances"],
         )
         output = []
-        for doc, meta, dist in zip(
+        for cid, doc, meta, dist in zip(
+            results["ids"][0],
             results["documents"][0],
             results["metadatas"][0],
             results["distances"][0],
         ):
+            m = _DIEU_RE.match(doc)
             output.append({
+                "chunk_id": cid,
+                "article": int(m.group(1)) if m else None,
                 "text": doc,
                 "title": meta["title"],
                 "law_type": meta["law_type"],
