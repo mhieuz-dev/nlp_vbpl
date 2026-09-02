@@ -1,10 +1,11 @@
+import json
 import logging
 import os
 import time
 
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -101,6 +102,36 @@ def ask(req: AskRequest, pipeline=Depends(get_pipeline)):
             status_code=502,
             content={"error": "Không gọi được mô hình sinh câu trả lời. Vui lòng thử lại."},
         )
+
+
+def _sse(event: str, data: dict) -> str:
+    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+@app.get("/api/ask/stream")
+def ask_stream(q: str, pipeline=Depends(get_pipeline)):
+    question = q.strip()
+    if not question:
+        raise HTTPException(status_code=400, detail="Câu hỏi không được để trống.")
+    if len(question) > 1000:
+        raise HTTPException(status_code=400, detail="Câu hỏi quá dài (tối đa 1000 ký tự).")
+
+    def stream():
+        buffer = []
+        try:
+            payload = run_query(
+                pipeline, question,
+                emit=lambda ev, data: buffer.append(_sse(ev, data)),
+            )
+        except Exception:
+            logger.exception("run_query thất bại cho /api/ask/stream")
+            yield from buffer
+            yield _sse("error", {"error": "Không gọi được mô hình sinh câu trả lời. Vui lòng thử lại."})
+            return
+        yield from buffer
+        yield _sse("done", payload)
+
+    return StreamingResponse(stream(), media_type="text/event-stream")
 
 
 app.mount("/", StaticFiles(directory="web", html=True), name="web")

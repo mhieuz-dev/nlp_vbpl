@@ -68,3 +68,43 @@ def test_ask_returns_502_when_generator_fails(client):
     assert r.status_code == 502
     assert "error" in r.json()
     assert "Gemini timeout" not in r.json()["error"]
+
+
+def _parse_sse(text):
+    events = []
+    for block in text.strip().split("\n\n"):
+        if not block.strip():
+            continue
+        name, data = None, None
+        for line in block.split("\n"):
+            if line.startswith("event: "):
+                name = line[7:]
+            elif line.startswith("data: "):
+                data = line[6:]
+        events.append((name, data))
+    return events
+
+
+def test_stream_emits_steps_then_done(client):
+    app.dependency_overrides[get_pipeline] = lambda: FakePipeline()
+    r = client.get("/api/ask/stream", params={"q": "Hợp đồng vô hiệu khi nào?"})
+    assert r.status_code == 200
+    names = [n for n, _ in _parse_sse(r.text)]
+    assert names[0] == "step"
+    assert "chunks" in names
+    assert names[-1] == "done"
+
+
+def test_stream_emits_error_event_when_generator_fails(client):
+    app.dependency_overrides[get_pipeline] = lambda: FakePipeline(
+        raises=RuntimeError("Gemini timeout")
+    )
+    r = client.get("/api/ask/stream", params={"q": "câu hỏi?"})
+    names = [n for n, _ in _parse_sse(r.text)]
+    assert names[-1] == "error"
+
+
+def test_stream_rejects_empty_question(client):
+    app.dependency_overrides[get_pipeline] = lambda: FakePipeline()
+    r = client.get("/api/ask/stream", params={"q": "  "})
+    assert r.status_code == 400
