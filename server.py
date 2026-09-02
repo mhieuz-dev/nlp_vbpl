@@ -1,3 +1,4 @@
+import logging
 import os
 import time
 
@@ -13,6 +14,8 @@ from src.pipeline.rag import RAGPipeline
 from src.vectorstore.store import VectorStore
 
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="luật.ai")
 
@@ -92,10 +95,11 @@ def ask(req: AskRequest, pipeline=Depends(get_pipeline)):
         raise HTTPException(status_code=400, detail="Câu hỏi không được để trống.")
     try:
         return run_query(pipeline, question)
-    except Exception as exc:
+    except Exception:
+        logger.exception("run_query thất bại cho /api/ask")
         return JSONResponse(
             status_code=502,
-            content={"error": f"Không gọi được mô hình sinh câu trả lời: {exc}"},
+            content={"error": "Không gọi được mô hình sinh câu trả lời. Vui lòng thử lại."},
         )
 
 

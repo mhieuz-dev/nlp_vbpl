@@ -67,3 +67,4 @@ def test_ask_returns_502_when_generator_fails(client):
     r = client.post("/api/ask", json={"question": "câu hỏi?"})
     assert r.status_code == 502
     assert "error" in r.json()
+    assert "Gemini timeout" not in r.json()["error"]
