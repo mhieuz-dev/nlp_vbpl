@@ -24,3 +24,49 @@ def test_generate_includes_source_titles():
         gen = Generator(api_key="fake_key")
         result = gen.generate("câu hỏi?", SAMPLE_CHUNKS)
         assert "Bộ luật Dân sự 2015" in result["sources"]
+
+
+FIVE_CHUNKS = [
+    {"text": f"Điều {100+i}. Nội dung điều luật {i}.", "title": "Bộ luật Dân sự 2015",
+     "law_type": "bo_luat", "score": 0.9 - i * 0.01}
+    for i in range(5)
+]
+
+
+def _gen_with_answer(answer_text):
+    from unittest.mock import patch, MagicMock
+    ctx = patch("src.generation.generator.genai")
+    mock_genai = ctx.start()
+    mock_client = MagicMock()
+    mock_client.models.generate_content.return_value.text = answer_text
+    mock_genai.Client.return_value = mock_client
+    return Generator(api_key="fake_key"), mock_client, ctx
+
+
+def test_generate_extracts_citations():
+    gen, _, ctx = _gen_with_answer("Câu một [1]. Câu hai [3]. Câu ba [1].")
+    try:
+        result = gen.generate("câu hỏi?", FIVE_CHUNKS)
+        assert result["citations"] == [1, 3]
+    finally:
+        ctx.stop()
+
+
+def test_generate_filters_out_of_range_citations():
+    gen, _, ctx = _gen_with_answer("Bịa nguồn [9] và [0] nhưng [2] thì hợp lệ.")
+    try:
+        result = gen.generate("câu hỏi?", FIVE_CHUNKS)
+        assert result["citations"] == [2]
+    finally:
+        ctx.stop()
+
+
+def test_prompt_numbers_the_chunks():
+    gen, mock_client, ctx = _gen_with_answer("Trả lời.")
+    try:
+        gen.generate("câu hỏi?", FIVE_CHUNKS)
+        prompt = mock_client.models.generate_content.call_args.kwargs["contents"]
+        assert "[1]" in prompt
+        assert "[5]" in prompt
+    finally:
+        ctx.stop()
