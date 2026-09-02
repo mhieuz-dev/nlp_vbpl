@@ -14,7 +14,7 @@ Câu hỏi: {question}
 Câu trả lời:"""
 
 class Generator:
-    def __init__(self, api_key: str, model_name: str = "gemini-2.0-flash"):
+    def __init__(self, api_key: str, model_name: str = "gemini-3.6-flash"):
         self.client = genai.Client(api_key=api_key)
         self.model_name = model_name
 

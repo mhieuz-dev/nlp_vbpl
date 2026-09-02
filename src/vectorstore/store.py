@@ -10,19 +10,24 @@ class VectorStore:
             metadata={"hnsw:space": "cosine"},
         )
 
+    BATCH_SIZE = 500
+
     def insert(self, chunks: list[dict]) -> None:
-        texts = [c["text"] for c in chunks]
-        embeddings = self.embedder.embed(texts)
-        self.collection.upsert(
-            ids=[c["chunk_id"] for c in chunks],
-            embeddings=embeddings,
-            documents=texts,
-            metadatas=[{
-                "doc_id": c["doc_id"],
-                "title": c["title"],
-                "law_type": c["law_type"],
-            } for c in chunks],
-        )
+        for i in range(0, len(chunks), self.BATCH_SIZE):
+            batch = chunks[i:i + self.BATCH_SIZE]
+            texts = [c["text"] for c in batch]
+            embeddings = self.embedder.embed(texts)
+            self.collection.upsert(
+                ids=[c["chunk_id"] for c in batch],
+                embeddings=embeddings,
+                documents=texts,
+                metadatas=[{
+                    "doc_id": c["doc_id"],
+                    "title": c["title"],
+                    "law_type": c["law_type"],
+                } for c in batch],
+            )
+            print(f"  Indexed {min(i + self.BATCH_SIZE, len(chunks))}/{len(chunks)} chunks...")
 
     def query(self, query_text: str, top_k: int = 5) -> list[dict]:
         query_embedding = self.embedder.embed_query(query_text)
