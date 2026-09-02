@@ -99,13 +99,16 @@
   }
 
   /* ---------- gọi API ---------- */
+  var current = null;
   function ask(question) {
+    if (current) { current.close(); current = null; }
     document.getElementById('think-q').textContent = question;
     var done = {};
     renderSteps(done, 'retrieve');
     showState('think');
 
     var es = new EventSource('/api/ask/stream?q=' + encodeURIComponent(question));
+    current = es;
     var next = { retrieve: 'generate', generate: 'cite', cite: null };
 
     es.addEventListener('step', function (e) {
@@ -115,6 +118,7 @@
     });
     es.addEventListener('done', function (e) {
       es.close();
+      if (current === es) current = null;
       var payload = JSON.parse(e.data);
       renderAnswer(payload);
       renderSources(payload.chunks);
@@ -126,6 +130,7 @@
     });
     es.addEventListener('error', function (e) {
       es.close();
+      if (current === es) current = null;
       var msg = 'Mất kết nối tới máy chủ. Thử lại giúp mình.';
       try { if (e.data) msg = JSON.parse(e.data).error; } catch (_) {}
       document.getElementById('steps').innerHTML =
