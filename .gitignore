@@ -12,3 +12,5 @@ memory.md
 .vscode/
 data/
 *.log
+web/vector_map.bin
+web/vector_map.json
