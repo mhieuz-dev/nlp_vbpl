@@ -1,1 +1,83 @@
-<h1>đang dựng</h1>
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>luật.ai — Tra cứu văn bản pháp luật Việt Nam</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@300;400;500;600;700;800;900&family=Spectral:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500;700&display=swap">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div class="app">
+  <canvas class="field" id="field"></canvas>
+  <div class="veil"></div>
+  <div class="inner">
+    <div class="nav">
+      <span class="brand"><i></i>luật.ai</span>
+      <span class="right">
+        <span class="tag">multilingual-e5-base</span>
+        <span class="tag"><b id="corpus-count">48.803</b> điều đã index</span>
+        <span class="mode" role="group" aria-label="Chế độ màu">
+          <button type="button" data-set="light" aria-pressed="false">Sáng</button>
+          <button type="button" data-set="dark" aria-pressed="true">Tối</button>
+        </span>
+      </span>
+    </div>
+
+    <section id="state-rest" class="rest">
+      <h2>Hỏi một câu. Nhận <em>điều luật thật</em>.</h2>
+      <p class="sub">Không đoán, không bịa. Mỗi câu trả lời đều dẫn về điều khoản gốc
+        trong văn bản quy phạm pháp luật đã số hoá.</p>
+      <form class="searchbar" id="ask-form">
+        <input id="q-input" type="text" autocomplete="off"
+               placeholder="Hợp đồng vô hiệu khi nào?" maxlength="1000">
+        <button type="submit" id="ask-btn">Tra cứu</button>
+      </form>
+      <div class="qchips" id="qchips">
+        <button class="qchip" type="button">Tuổi kết hôn tối thiểu?</button>
+        <button class="qchip" type="button">Thời hiệu khởi kiện dân sự</button>
+        <button class="qchip" type="button">Di chúc hợp lệ cần gì?</button>
+        <button class="qchip" type="button">Phân loại tội phạm</button>
+        <button class="qchip" type="button">Bồi thường ngoài hợp đồng</button>
+      </div>
+      <div class="statrow">
+        <div><b>48.803</b><span>điều luật</span></div>
+        <div><b>624</b><span>văn bản</span></div>
+        <div><b>0,88</b><span>độ khớp TB</span></div>
+        <div><b>~2s</b><span>mỗi câu</span></div>
+      </div>
+    </section>
+
+    <section id="state-think" class="think" hidden>
+      <div class="qecho" id="think-q"></div>
+      <div class="steps" id="steps"></div>
+      <div class="skel">
+        <div class="ln" style="width:96%"></div>
+        <div class="ln" style="width:88%"></div>
+        <div class="ln" style="width:71%"></div>
+        <div class="ln" style="width:46%"></div>
+      </div>
+    </section>
+
+    <section id="state-answer" hidden>
+      <div class="ansgrid">
+        <div class="card">
+          <p class="lbl">Tổng hợp <b>gemini-3.6-flash</b></p>
+          <div id="answer-body"></div>
+          <div class="metrics" id="metrics"></div>
+          <p class="disc"><b>▲</b> Tham khảo học thuật — không thay thế ý kiến
+            của người hành nghề luật.</p>
+        </div>
+        <div class="card">
+          <p class="lbl">Nguồn <b>top 5</b></p>
+          <div id="src-list"></div>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+<script src="/app.js"></script>
+</body>
+</html>
