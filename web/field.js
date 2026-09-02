@@ -55,6 +55,7 @@
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     renderStill();
     recomputeHot();
+    paintOnce();
   }
   window.addEventListener('resize', resize);
 
@@ -97,6 +98,12 @@
     if (!reduce) requestAnimationFrame(draw);
   }
 
+  /* Vòng rAF bị tắt khi người dùng bật giảm chuyển động, nên phải vẽ lại thủ công
+     mỗi khi trạng thái đổi — nếu không, nền và các điểm nổi bật sẽ không bao giờ cập nhật. */
+  function paintOnce() {
+    if (reduce) draw();
+  }
+
   Promise.all([
     fetch('/vector_map.bin').then(function (r) {
       if (!r.ok) throw new Error('không có vector_map.bin');
@@ -120,6 +127,7 @@
 
   window.addEventListener('luatai:mode', function () {
     renderStill();
+    paintOnce();
   });
 
   window.addEventListener('luatai:answer', function (e) {
@@ -131,5 +139,6 @@
       hot.push({ x: coords[i * 3], y: coords[i * 3 + 1], z: coords[i * 3 + 2] });
     });
     recomputeHot();
+    paintOnce();
   });
 })();
