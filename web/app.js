@@ -60,6 +60,20 @@
     }).join('');
   }
 
+  /* Nguyên văn điều luật được trích: serif, khung viền ngọc — tách khỏi lời máy. */
+  function renderStatutes(payload) {
+    var byN = {};
+    payload.chunks.forEach(function (c) { byN[c.n] = c; });
+    return payload.citations.map(function (n) {
+      var c = byN[n];
+      if (!c) return '';
+      var src = (c.article != null ? 'Điều ' + esc(c.article) + ' · ' : '') +
+        esc(c.title) + ' · nguyên văn';
+      return '<div class="statute"><div class="src">' + src + '</div>' +
+        '<q>' + esc(c.text) + '</q></div>';
+    }).join('');
+  }
+
   /* Chú dẫn [n] trong câu trả lời -> chip bấm được, làm nổi nguồn tương ứng. */
   function renderAnswer(payload) {
     var html = esc(payload.answer).replace(/\[(\d+)\]/g, function (_, n) {
@@ -67,7 +81,8 @@
     });
     document.getElementById('answer-body').innerHTML =
       '<div class="synth">' + html.split('\n').filter(Boolean)
-        .map(function (p) { return '<p>' + p + '</p>'; }).join('') + '</div>';
+        .map(function (p) { return '<p>' + p + '</p>'; }).join('') + '</div>' +
+      renderStatutes(payload);
 
     var top = payload.chunks[0] || {};
     var totalMs = payload.timings.retrieve_ms + payload.timings.generate_ms;
@@ -102,6 +117,8 @@
   var current = null;
   function ask(question) {
     if (current) { current.close(); current = null; }
+    var ae = document.getElementById('ask-err');
+    if (ae) ae.hidden = true;
     document.getElementById('think-q').textContent = question;
     var done = {};
     renderSteps(done, 'retrieve');
@@ -129,13 +146,14 @@
       window.dispatchEvent(new CustomEvent('luatai:answer', { detail: payload }));
     });
     es.addEventListener('error', function (e) {
+      if (current !== es) return;
       es.close();
-      if (current === es) current = null;
+      current = null;
       var msg = 'Mất kết nối tới máy chủ. Thử lại giúp mình.';
       try { if (e.data) msg = JSON.parse(e.data).error; } catch (_) {}
-      document.getElementById('steps').innerHTML =
-        '<div class="step now"><span class="ic">!</span><div class="tx"><b>' +
-        esc(msg) + '</b><span>bấm Tra cứu để thử lại</span></div></div>';
+      var ae = document.getElementById('ask-err');
+      if (ae) { ae.textContent = msg + ' — bấm Tra cứu để thử lại.'; ae.hidden = false; }
+      showState('rest');
     });
   }
 
