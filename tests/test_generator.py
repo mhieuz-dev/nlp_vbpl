@@ -70,3 +70,15 @@ def test_prompt_numbers_the_chunks():
         assert "[5]" in prompt
     finally:
         ctx.stop()
+
+
+def test_generate_handles_blocked_response():
+    """Gemini trả response.text = None khi câu trả lời bị chặn — không được để lọt 'None'."""
+    gen, _, ctx = _gen_with_answer(None)
+    try:
+        result = gen.generate("câu hỏi hình sự?", FIVE_CHUNKS)
+        assert isinstance(result["answer"], str)
+        assert result["answer"].strip()
+        assert result["answer"] not in ("None", "null")
+    finally:
+        ctx.stop()

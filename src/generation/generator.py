@@ -40,7 +40,7 @@ class Generator:
             model=self.model_name,
             contents=prompt,
         )
-        answer = response.text
+        answer = response.text or "Hệ thống không tạo được câu trả lời cho câu hỏi này."
         citations = []
         for raw in _CITE_RE.findall(answer or ""):
             n = int(raw)

@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import time
+from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException
@@ -18,8 +19,6 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="luật.ai")
-
 _pipeline = None
 
 
@@ -32,6 +31,25 @@ def get_pipeline() -> RAGPipeline:
         generator = Generator(api_key=os.getenv("GEMINI_API_KEY"))
         _pipeline = RAGPipeline(store=store, generator=generator)
     return _pipeline
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Nạp pipeline một lần lúc khởi động thay vì trong request đầu tiên.
+
+    Nếu nạp thất bại (thiếu API key, chưa có Chroma...) thì ghi log và vẫn cho
+    server bind — `get_pipeline()` sẽ thử lại ở truy vấn kế tiếp. Bỏ qua khi test
+    đã override `get_pipeline` để không bao giờ nạp model thật.
+    """
+    if get_pipeline not in app.dependency_overrides:
+        try:
+            get_pipeline()
+        except Exception:
+            logger.exception("Nạp pipeline lúc khởi động thất bại; sẽ thử lại ở truy vấn đầu tiên")
+    yield
+
+
+app = FastAPI(title="luật.ai", lifespan=lifespan)
 
 
 class AskRequest(BaseModel):
@@ -54,39 +72,43 @@ def number_chunks(chunks: list[dict]) -> list[dict]:
     ]
 
 
-def run_query(pipeline, question: str, emit=None) -> dict:
-    """Chạy truy vấn, phát sự kiện từng bước qua `emit` nếu có.
+def run_query_events(pipeline, question: str):
+    """Chạy truy vấn, sinh (event, data) theo đúng thời điểm xảy ra.
 
     Ba bước đo được thật: retrieve (embed + tìm kiếm), generate, cite.
+    Sự kiện cuối luôn là ("done", payload) — payload giống hệt POST /api/ask.
     """
-    def fire(event, data):
-        if emit is not None:
-            emit(event, data)
-
     t0 = time.perf_counter()
     chunks = pipeline.store.query(question, top_k=pipeline.top_k)
     t1 = time.perf_counter()
     retrieve_ms = int((t1 - t0) * 1000)
-    fire("step", {"step": "retrieve", "ms": retrieve_ms, "found": len(chunks)})
+    yield "step", {"step": "retrieve", "ms": retrieve_ms, "found": len(chunks)}
 
     numbered = number_chunks(chunks)
-    fire("chunks", {"chunks": numbered})
+    yield "chunks", {"chunks": numbered}
 
     result = pipeline.generator.generate(question, chunks)
     t2 = time.perf_counter()
     generate_ms = int((t2 - t1) * 1000)
-    fire("step", {"step": "generate", "ms": generate_ms})
+    yield "step", {"step": "generate", "ms": generate_ms}
 
     citations = result.get("citations", [])
-    fire("step", {"step": "cite", "ms": 0, "count": len(citations)})
+    yield "step", {"step": "cite", "ms": 0, "count": len(citations)}
 
-    return {
+    yield "done", {
         "answer": result["answer"],
         "citations": citations,
         "sources": result["sources"],
         "chunks": numbered,
         "timings": {"retrieve_ms": retrieve_ms, "generate_ms": generate_ms},
     }
+
+
+def run_query(pipeline, question: str) -> dict:
+    """Bọc không-stream cho POST /api/ask."""
+    for event, data in run_query_events(pipeline, question):
+        if event == "done":
+            return data
 
 
 @app.post("/api/ask")
@@ -117,19 +139,12 @@ def ask_stream(q: str, pipeline=Depends(get_pipeline)):
         raise HTTPException(status_code=400, detail="Câu hỏi quá dài (tối đa 1000 ký tự).")
 
     def stream():
-        buffer = []
         try:
-            payload = run_query(
-                pipeline, question,
-                emit=lambda ev, data: buffer.append(_sse(ev, data)),
-            )
+            for event, data in run_query_events(pipeline, question):
+                yield _sse(event, data)
         except Exception:
             logger.exception("run_query thất bại cho /api/ask/stream")
-            yield from buffer
             yield _sse("error", {"error": "Không gọi được mô hình sinh câu trả lời. Vui lòng thử lại."})
-            return
-        yield from buffer
-        yield _sse("done", payload)
 
     return StreamingResponse(stream(), media_type="text/event-stream")
 
