@@ -82,3 +82,58 @@ def test_generate_handles_blocked_response():
         assert result["answer"] not in ("None", "null")
     finally:
         ctx.stop()
+
+
+def test_generate_caps_thinking_budget():
+    """Model mặc định đốt ~1400 token suy nghĩ cho một câu tra cứu; phải giới hạn lại."""
+    gen, mock_client, ctx = _gen_with_answer("Trả lời [1].")
+    try:
+        gen.generate("câu hỏi?", FIVE_CHUNKS)
+        cfg = mock_client.models.generate_content.call_args.kwargs.get("config")
+        assert cfg is not None, "phải truyền config"
+        budget = cfg.thinking_config.thinking_budget
+        assert 0 < budget <= 256, f"budget phải nhỏ và dương, đang là {budget}"
+    finally:
+        ctx.stop()
+
+
+def test_generate_retries_on_503_then_succeeds():
+    """Gemini hay trả 503 'high demand'; retry thay vì ném lỗi ra người dùng."""
+    from unittest.mock import patch, MagicMock
+    import src.generation.generator as G
+
+    calls = {"n": 0}
+
+    def flaky(*a, **kw):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("503 UNAVAILABLE. This model is currently experiencing high demand.")
+        r = MagicMock()
+        r.text = "Trả lời sau khi thử lại [1]."
+        return r
+
+    with patch.object(G, "genai") as mock_genai, \
+         patch.object(G, "RETRY_DELAYS", (0.0, 0.0)):
+        mock_client = MagicMock()
+        mock_client.models.generate_content.side_effect = flaky
+        mock_genai.Client.return_value = mock_client
+        gen = G.Generator(api_key="fake_key")
+        result = gen.generate("câu hỏi?", FIVE_CHUNKS)
+
+    assert calls["n"] == 2, "phải thử lại đúng một lần"
+    assert "sau khi thử lại" in result["answer"]
+
+
+def test_generate_gives_up_after_retries_exhausted():
+    from unittest.mock import patch, MagicMock
+    import pytest as _pytest
+    import src.generation.generator as G
+
+    with patch.object(G, "genai") as mock_genai, \
+         patch.object(G, "RETRY_DELAYS", (0.0, 0.0)):
+        mock_client = MagicMock()
+        mock_client.models.generate_content.side_effect = RuntimeError("503 UNAVAILABLE")
+        mock_genai.Client.return_value = mock_client
+        gen = G.Generator(api_key="fake_key")
+        with _pytest.raises(RuntimeError):
+            gen.generate("câu hỏi?", FIVE_CHUNKS)

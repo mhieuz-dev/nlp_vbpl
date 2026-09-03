@@ -1,8 +1,22 @@
 import re
+import unicodedata
+
 import chromadb
 from src.embeddings.embedder import Embedder
 
 _DIEU_RE = re.compile(r"^\s*Điều\s+(\d+)")
+
+# Kho nạp từ UTS_VLC chứa mỗi bộ luật khoảng 3 lần dưới 3 cách viết tên khác
+# nhau, nội dung chỉ lệch ở khoảng trắng và dấu chấm. Không khử thì top-5 bị
+# các bản sao chiếm hết chỗ (đo thật: top-10 chỉ còn 4 điều khác nhau).
+DEDUP_OVERFETCH = 4
+
+
+def _dedup_key(text: str) -> str:
+    """Khoá so trùng: bỏ dấu tiếng Việt, bỏ ký tự không phải chữ-số, lấy 160 ký tự đầu."""
+    t = unicodedata.normalize("NFD", text.lower())
+    t = "".join(c for c in t if unicodedata.category(c) != "Mn")
+    return re.sub(r"[^a-z0-9]+", " ", t).strip()[:160]
 
 class VectorStore:
     def __init__(self, embedder: Embedder, collection_name: str = "vn_legal", persist_dir: str = "./data/chroma_db"):
@@ -36,16 +50,21 @@ class VectorStore:
         query_embedding = self.embedder.embed_query(query_text)
         results = self.collection.query(
             query_embeddings=[query_embedding],
-            n_results=top_k,
+            n_results=top_k * DEDUP_OVERFETCH,
             include=["documents", "metadatas", "distances"],
         )
         output = []
+        seen = set()
         for cid, doc, meta, dist in zip(
             results["ids"][0],
             results["documents"][0],
             results["metadatas"][0],
             results["distances"][0],
         ):
+            key = _dedup_key(doc)
+            if key in seen:
+                continue
+            seen.add(key)
             m = _DIEU_RE.match(doc)
             output.append({
                 "chunk_id": cid,
@@ -55,4 +74,6 @@ class VectorStore:
                 "law_type": meta["law_type"],
                 "score": round(1 - dist, 4),
             })
+            if len(output) == top_k:
+                break
         return output
