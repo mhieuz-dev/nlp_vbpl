@@ -2,7 +2,7 @@
   var root = document.documentElement;
   var STEP_LABELS = {
     retrieve: ['Quét kho điều luật', 'ChromaDB · HNSW cosine'],
-    generate: ['Tổng hợp câu trả lời', 'gemini-3.6-flash'],
+    generate: ['Tổng hợp câu trả lời', 'mô hình ngôn ngữ'],
     cite: ['Gắn trích dẫn về điều gốc', 'đối chiếu số nguồn']
   };
 
@@ -76,6 +76,8 @@
 
   /* Chú dẫn [n] trong câu trả lời -> chip bấm được, làm nổi nguồn tương ứng. */
   function renderAnswer(payload) {
+    var lbl = document.querySelector('#state-answer .lbl b');
+    if (lbl && payload.model) lbl.textContent = payload.model;
     var html = esc(payload.answer).replace(/\[(\d+)\]/g, function (_, n) {
       return '<span class="ref" data-n="' + n + '">' + n + '</span>';
     });

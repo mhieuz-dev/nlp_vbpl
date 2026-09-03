@@ -31,7 +31,7 @@ def get_pipeline() -> RAGPipeline:
         # không tìm được (đo thật: Điều 630 không lọt cả top-30). Bật lên,
         # Recall@5 0.773 -> 0.864, MRR 0.551 -> 0.712.
         store = VectorStore(embedder=embedder, article_lookup=True)
-        generator = Generator(api_key=os.getenv("GEMINI_API_KEY"))
+        generator = Generator()  # đọc LLM_* / GEMINI_API_KEY từ môi trường
         _pipeline = RAGPipeline(store=store, generator=generator)
     return _pipeline
 
@@ -103,6 +103,7 @@ def run_query_events(pipeline, question: str):
         "citations": citations,
         "sources": result["sources"],
         "chunks": numbered,
+        "model": pipeline.generator.model_name,
         "timings": {"retrieve_ms": retrieve_ms, "generate_ms": generate_ms},
     }
 

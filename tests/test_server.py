@@ -7,6 +7,7 @@ from server import app, get_pipeline
 
 class FakePipeline:
     top_k = 5
+    model_name = "fake-model"
 
     def __init__(self, chunks=None, answer="Trả lời [1].", raises=None):
         self._chunks = chunks if chunks is not None else [{
@@ -46,6 +47,7 @@ def test_ask_returns_expected_shape(client):
     assert body["chunks"][0]["article"] == 122
     assert "retrieve_ms" in body["timings"]
     assert "generate_ms" in body["timings"]
+    assert body["model"] == "fake-model"
 
 
 def test_ask_rejects_empty_question(client):
