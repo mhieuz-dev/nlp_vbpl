@@ -328,7 +328,7 @@ Framework & sentence-transformers, datasets, fastapi, uvicorn, scikit-learn, pyt
 \mucon{Cấu trúc dự án}
 
 \begin{Verbatim}
-nlp_main/
+nlp_vbpl/
 ├── src/
 │   ├── ingestion/      # loader.py, chunker.py
 │   ├── embeddings/     # embedder.py (multilingual-e5-base)
@@ -339,7 +339,7 @@ nlp_main/
 ├── server.py           # FastAPI: /api/ask, /api/ask/stream (SSE)
 ├── web/                # giao diện: index.html, style.css, app.js, field.js
 ├── scripts/            # index_documents.py
-└── tests/              # 7 file test, 17 test cases
+└── tests/              # 9 file test, 32 test cases
 \end{Verbatim}
 
 \mucon{Quy trình thực nghiệm}
@@ -361,12 +361,14 @@ Bước 2 — Chạy kiểm thử (pytest):
 test\_loader.py & ingestion/loader & 3 & PASS \\
 test\_chunker.py & ingestion/chunker & 4 & PASS \\
 test\_embedder.py & embeddings/embedder & 3 & PASS \\
-test\_store.py & vectorstore/store & 2 & PASS \\
-test\_generator.py & generation/generator & 2 & PASS \\
+test\_store.py & vectorstore/store & 4 & PASS \\
+test\_generator.py & generation/generator & 6 & PASS \\
 test\_pipeline.py & pipeline/rag & 2 & PASS \\
 test\_evaluator.py & evaluation/evaluator & 1 & PASS \\
+test\_server.py & server (API + SSE) & 7 & PASS \\
+test\_export\_vector\_map.py & scripts/export\_vector\_map & 2 & PASS \\
 \midrule
-\textbf{TỔNG} & --- & \textbf{17} & \textbf{17/17 PASS} \\
+\textbf{TỔNG} & --- & \textbf{32} & \textbf{32/32 PASS} \\
 \bottomrule
 \end{tabularx}\\[4pt]
 {\small\itshape Bảng 3. Kết quả kiểm thử từng module (pytest)}
@@ -517,7 +519,7 @@ Retrieval scores: 0,89 · 0,87 · 0,86 · 0,85 · 0,84
 \mucon{Chạy demo}
 
 \begin{Verbatim}
-cd ~/Desktop/STUDY/nlp_main
+cd ~/Desktop/STUDY/nlp_vbpl
 python -m uvicorn server:app --port 8000
 # Truy cap: http://127.0.0.1:8000
 \end{Verbatim}
@@ -539,7 +541,7 @@ python -m uvicorn server:app --port 8000
 Dữ liệu & 624 văn bản luật, 48.803 chunks & UTS\_VLC, 3 splits \\
 Hit Rate & 100\% (10/10) & Bộ câu hỏi pháp luật \\
 Avg Retrieval Score & 0,8765 & Cosine similarity \\
-Test coverage & 17/17 PASS & Toàn bộ test cases \\
+Test coverage & 32/32 PASS & Toàn bộ test cases \\
 Demo & Giao diện web & http://localhost:8000 \\
 Model comparison & 2 mô hình & e5-base tốt hơn vi-sbert \\
 \bottomrule
