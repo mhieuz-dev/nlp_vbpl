@@ -83,3 +83,38 @@ def test_query_never_returns_two_copies_of_same_article(dedup_store):
     results = dedup_store.query("hợp đồng vô hiệu", top_k=4)
     articles = [r["article"] for r in results]
     assert len(articles) == len(set(articles)), f"kết quả còn điều trùng: {articles}"
+
+
+ARTICLE_CHUNKS = [
+    {"chunk_id": "ds_0", "doc_id": "ds", "title": "Bộ Luật dân sự", "law_type": "code",
+     "text": "Điều 630. Di chúc hợp pháp phải có đủ các điều kiện luật định.", "char_start": 0},
+    {"chunk_id": "ds_1", "doc_id": "ds", "title": "Bộ Luật dân sự", "law_type": "code",
+     "text": "Điều 1. Phạm vi điều chỉnh của bộ luật này.", "char_start": 0},
+    {"chunk_id": "nh_0", "doc_id": "nh", "title": "Luật Nhà ở", "law_type": "law",
+     "text": "Điều 630. Quy định không liên quan gì tới di chúc.", "char_start": 0},
+]
+
+
+@pytest.fixture
+def article_store():
+    return VectorStore(
+        embedder=Embedder(),
+        collection_name="test_article",
+        persist_dir="./data/test_chroma",
+        article_lookup=True,
+    )
+
+
+def test_query_naming_an_article_surfaces_it_first(article_store):
+    """Dense không tra được theo số điều; câu hỏi nêu đích danh phải đi đường khác."""
+    article_store.insert(ARTICLE_CHUNKS)
+    results = article_store.query("Điều 630 Bộ luật Dân sự nói về vấn đề gì?", top_k=3)
+    assert results[0]["article"] == 630
+    assert "dân sự" in results[0]["title"].lower()
+
+
+def test_query_without_article_reference_is_unchanged(article_store):
+    article_store.insert(ARTICLE_CHUNKS)
+    results = article_store.query("di chúc hợp pháp", top_k=2)
+    assert len(results) <= 2
+    assert all("article" in r for r in results)

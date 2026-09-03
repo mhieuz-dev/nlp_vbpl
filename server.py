@@ -27,7 +27,10 @@ def get_pipeline() -> RAGPipeline:
     global _pipeline
     if _pipeline is None:
         embedder = Embedder()
-        store = VectorStore(embedder=embedder)
+        # article_lookup: câu hỏi nêu đích danh "Điều N" thì dense gần như
+        # không tìm được (đo thật: Điều 630 không lọt cả top-30). Bật lên,
+        # Recall@5 0.773 -> 0.864, MRR 0.551 -> 0.712.
+        store = VectorStore(embedder=embedder, article_lookup=True)
         generator = Generator(api_key=os.getenv("GEMINI_API_KEY"))
         _pipeline = RAGPipeline(store=store, generator=generator)
     return _pipeline
@@ -111,6 +114,25 @@ def run_query(pipeline, question: str) -> dict:
             return data
 
 
+GENERIC_ERROR = "Không gọi được mô hình sinh câu trả lời. Vui lòng thử lại."
+QUOTA_ERROR = (
+    "Đã dùng hết hạn mức (quota) gọi mô hình của khoá API. "
+    "Thử lại ngay cũng không được cho tới khi hạn mức được cấp lại."
+)
+
+
+def _error_message(exc: Exception) -> str:
+    """Thông điệp tiếng Việt cho người dùng, không lộ chi tiết nội bộ.
+
+    Hết quota khác hẳn lỗi tạm thời: bảo người dùng "thử lại" là sai vì
+    thử lại không giúp gì cho tới khi hạn mức được cấp lại.
+    """
+    text = str(exc)
+    if "429" in text or "RESOURCE_EXHAUSTED" in text or "quota" in text.lower():
+        return QUOTA_ERROR
+    return GENERIC_ERROR
+
+
 @app.post("/api/ask")
 def ask(req: AskRequest, pipeline=Depends(get_pipeline)):
     question = req.question.strip()
@@ -118,11 +140,11 @@ def ask(req: AskRequest, pipeline=Depends(get_pipeline)):
         raise HTTPException(status_code=400, detail="Câu hỏi không được để trống.")
     try:
         return run_query(pipeline, question)
-    except Exception:
+    except Exception as exc:
         logger.exception("run_query thất bại cho /api/ask")
         return JSONResponse(
             status_code=502,
-            content={"error": "Không gọi được mô hình sinh câu trả lời. Vui lòng thử lại."},
+            content={"error": _error_message(exc)},
         )
 
 
@@ -142,9 +164,9 @@ def ask_stream(q: str, pipeline=Depends(get_pipeline)):
         try:
             for event, data in run_query_events(pipeline, question):
                 yield _sse(event, data)
-        except Exception:
+        except Exception as exc:
             logger.exception("run_query thất bại cho /api/ask/stream")
-            yield _sse("error", {"error": "Không gọi được mô hình sinh câu trả lời. Vui lòng thử lại."})
+            yield _sse("error", {"error": _error_message(exc)})
 
     return StreamingResponse(stream(), media_type="text/event-stream")
 

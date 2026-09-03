@@ -108,3 +108,25 @@ def test_stream_rejects_empty_question(client):
     app.dependency_overrides[get_pipeline] = lambda: FakePipeline()
     r = client.get("/api/ask/stream", params={"q": "  "})
     assert r.status_code == 400
+
+
+def test_ask_gives_quota_specific_message(client):
+    """Hết quota thì bảo "thử lại" là sai - thử lại vô ích tới khi quota reset."""
+    app.dependency_overrides[get_pipeline] = lambda: FakePipeline(
+        raises=RuntimeError("429 RESOURCE_EXHAUSTED. You exceeded your current quota")
+    )
+    r = client.post("/api/ask", json={"question": "câu hỏi?"})
+    assert r.status_code == 502
+    msg = r.json()["error"]
+    assert "quota" in msg.lower() or "hạn mức" in msg.lower(), msg
+    assert "Vui lòng thử lại." not in msg
+    assert "429" not in msg and "RESOURCE_EXHAUSTED" not in msg
+
+
+def test_ask_keeps_generic_message_for_other_errors(client):
+    app.dependency_overrides[get_pipeline] = lambda: FakePipeline(
+        raises=RuntimeError("Gemini timeout")
+    )
+    r = client.post("/api/ask", json={"question": "câu hỏi?"})
+    assert "Vui lòng thử lại" in r.json()["error"]
+    assert "Gemini timeout" not in r.json()["error"]
