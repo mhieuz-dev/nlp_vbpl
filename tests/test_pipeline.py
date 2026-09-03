@@ -17,7 +17,17 @@ def test_pipeline_ask_returns_answer():
     assert "answer" in result
     assert "sources" in result
     assert "retrieved_chunks" in result
-    mock_store.query.assert_called_once_with("Hỏi gì đó?", top_k=5)
+    # Kiểm hành vi (truyền đúng top_k đã cấu hình), không ghim con số mặc định.
+    mock_store.query.assert_called_once_with("Hỏi gì đó?", top_k=pipeline.top_k)
+
+
+def test_pipeline_honours_custom_top_k():
+    mock_store = MagicMock()
+    mock_store.query.return_value = []
+    mock_generator = MagicMock()
+    mock_generator.generate.return_value = {"answer": "A", "sources": [], "chunks_used": []}
+    RAGPipeline(store=mock_store, generator=mock_generator, top_k=3).ask("q")
+    mock_store.query.assert_called_once_with("q", top_k=3)
 
 def test_pipeline_passes_chunks_to_generator():
     mock_store = MagicMock()

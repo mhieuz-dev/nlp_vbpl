@@ -125,6 +125,8 @@
   }
 
   function renderSources(chunks) {
+    var cnt = document.getElementById('src-count');
+    if (cnt) cnt.textContent = 'top ' + chunks.length;
     document.getElementById('src-list').innerHTML = chunks.map(function (c, i) {
       var label = c.article ? 'Điều ' + c.article : c.title;
       var pct = Math.round(c.score * 100);
