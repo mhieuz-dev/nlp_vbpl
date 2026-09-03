@@ -75,15 +75,40 @@
   }
 
   /* Chú dẫn [n] trong câu trả lời -> chip bấm được, làm nổi nguồn tương ứng. */
+  /* Model trả markdown (**đậm**, danh sách "- ", tiêu đề "##"). Escape TRƯỚC rồi
+     mới dựng thẻ, nên chuỗi do model sinh không thể chèn HTML. Chỉ nhận đúng ba
+     dạng model thực sự dùng - không phải bộ parse markdown đầy đủ. */
+  function mdToHtml(text) {
+    var esced = esc(String(text == null ? '' : text));
+    function inline(t) {
+      return t
+        .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+        .replace(/\[(\d+)\]/g, '<span class="ref" data-n="$1">$1</span>');
+    }
+    var out = [], list = null;
+    esced.split('\n').forEach(function (raw) {
+      var line = raw.trim();
+      if (!line) return;
+      var bullet = line.match(/^[-*]\s+(.*)$/);
+      if (bullet) {
+        list = list || [];
+        list.push('<li>' + inline(bullet[1]) + '</li>');
+        return;
+      }
+      if (list) { out.push('<ul>' + list.join('') + '</ul>'); list = null; }
+      var head = line.match(/^#{1,6}\s+(.*)$/);
+      out.push(head ? '<p class="sub-h">' + inline(head[1]) + '</p>'
+                    : '<p>' + inline(line) + '</p>');
+    });
+    if (list) out.push('<ul>' + list.join('') + '</ul>');
+    return out.join('');
+  }
+
   function renderAnswer(payload) {
     var lbl = document.querySelector('#state-answer .lbl b');
     if (lbl && payload.model) lbl.textContent = payload.model;
-    var html = esc(payload.answer).replace(/\[(\d+)\]/g, function (_, n) {
-      return '<span class="ref" data-n="' + n + '">' + n + '</span>';
-    });
     document.getElementById('answer-body').innerHTML =
-      '<div class="synth">' + html.split('\n').filter(Boolean)
-        .map(function (p) { return '<p>' + p + '</p>'; }).join('') + '</div>' +
+      '<div class="synth">' + mdToHtml(payload.answer) + '</div>' +
       renderStatutes(payload);
 
     var top = payload.chunks[0] || {};

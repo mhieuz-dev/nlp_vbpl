@@ -43,6 +43,10 @@ QUY TẮC TRÍCH DẪN - bắt buộc tuân thủ:
 - Chỉ được dùng số từ 1 đến {n}. Tuyệt đối không ghi số nằm ngoài khoảng này.
 - Nếu một mệnh đề không dựa trên nguồn nào, không ghi trích dẫn cho mệnh đề đó.
 
+ĐỊNH DẠNG:
+- Viết thành đoạn văn hoặc gạch đầu dòng "- ". Không dùng tiêu đề markdown (##).
+- Chỉ dùng **in đậm** cho thuật ngữ then chốt.
+
 --- CÁC ĐIỀU LUẬT LIÊN QUAN ---
 {context}
 --- KẾT THÚC ---

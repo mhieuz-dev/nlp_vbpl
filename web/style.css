@@ -231,3 +231,9 @@ body{margin:0;background:var(--void);color:var(--tx);font-family:var(--sans);
 #q-input::placeholder{color:var(--tx3)}
 #state-answer[hidden],#state-think[hidden],#state-rest[hidden]{display:none}
 .qchip{font:inherit}
+
+/* ---- markdown tối giản trong câu trả lời của máy ---- */
+.synth ul{margin:0 0 13px;padding-left:20px;list-style:disc}
+.synth li{font-size:16px;line-height:1.72;font-weight:300;color:var(--tx);margin:0 0 6px}
+.synth li strong,.synth p strong{font-weight:700;color:var(--tx-strong)}
+.synth p.sub-h{font-weight:700;color:var(--tx-strong);margin:16px 0 8px}
