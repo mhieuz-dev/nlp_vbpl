@@ -19,6 +19,10 @@ from openai import OpenAI
 
 _CITE_RE = re.compile(r"\[(\d+)\]")
 
+# Model suy nghĩ (qwen3.6 trên Groq) rò khối lý luận tiếng Anh vào câu trả lời.
+# Bỏ cả trường hợp thẻ mở không có thẻ đóng (phản hồi bị cắt giữa chừng).
+_THINK_RE = re.compile(r"<think>.*?(?:</think>|$)", re.DOTALL | re.IGNORECASE)
+
 DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
 DEFAULT_MODEL = "gemini-flash-latest"  # 3.6-flash free tier chỉ 20 request/NGÀY
 
@@ -90,7 +94,8 @@ class Generator:
         prompt = PROMPT_TEMPLATE.format(context=context, question=question, n=len(chunks))
         response = self._call_with_retry([{"role": "user", "content": prompt}])
 
-        answer = (response.choices[0].message.content or "").strip()
+        raw = response.choices[0].message.content or ""
+        answer = _THINK_RE.sub("", raw).strip()
         if not answer:
             answer = "Hệ thống không tạo được câu trả lời cho câu hỏi này."
 

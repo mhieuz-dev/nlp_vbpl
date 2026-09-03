@@ -164,3 +164,38 @@ def test_generator_reads_provider_config_from_env(monkeypatch):
         _, kwargs = mock_cls.call_args
         assert kwargs["base_url"] == "https://api.groq.com/openai/v1"
         assert kwargs["api_key"] == "groq_key"
+
+
+def test_generate_strips_thinking_blocks():
+    """qwen3.6 rò khối <think> tiếng Anh vào câu trả lời; không được để lọt ra UI."""
+    gen, _, ctx = _gen(
+        "<think>\nOkay the user asks about contracts. Let me check source [1].\n</think>\n"
+        "Hợp đồng vô hiệu khi vi phạm điều kiện [1]."
+    )
+    try:
+        answer = gen.generate("câu hỏi?", FIVE_CHUNKS)["answer"]
+        assert "<think>" not in answer and "</think>" not in answer
+        assert "Okay the user asks" not in answer
+        assert answer.startswith("Hợp đồng vô hiệu")
+    finally:
+        ctx.stop()
+
+
+def test_generate_strips_unclosed_thinking_block():
+    """Bị cắt giữa chừng thì thẻ mở không có thẻ đóng - vẫn phải bỏ."""
+    gen, _, ctx = _gen("<think>reasoning bị cắt ngang mà không đóng thẻ")
+    try:
+        answer = gen.generate("câu hỏi?", FIVE_CHUNKS)["answer"]
+        assert "<think>" not in answer
+        assert answer.strip()
+    finally:
+        ctx.stop()
+
+
+def test_citations_ignore_numbers_inside_thinking_block():
+    """Số nguồn model nhắc lúc suy nghĩ không được tính là trích dẫn thật."""
+    gen, _, ctx = _gen("<think>maybe [4] or [5]?</think>Chỉ dùng nguồn [1].")
+    try:
+        assert gen.generate("câu hỏi?", FIVE_CHUNKS)["citations"] == [1]
+    finally:
+        ctx.stop()
