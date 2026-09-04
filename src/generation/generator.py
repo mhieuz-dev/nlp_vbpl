@@ -90,6 +90,11 @@ nào, và loại văn bản nào mới chứa nó>
 Tuyệt đối KHÔNG ghép các điều luật gần chủ đề lại để tạo ra một câu trả lời
 nghe có vẻ đúng.
 
+Khi nói loại văn bản nào mới chứa câu trả lời, chỉ nêu LOẠI (ví dụ "nghị định
+xử phạt vi phạm hành chính trong lĩnh vực giao thông"). TUYỆT ĐỐI không nêu số
+hiệu cụ thể (kiểu "Nghị định 123/2021/NĐ-CP") vì số hiệu đó không có trong kho
+và nêu sai còn tệ hơn không nêu.
+
 QUY TẮC TRÍCH DẪN - bắt buộc tuân thủ:
 - Sau mỗi mệnh đề, ghi số nguồn trong ngoặc vuông, ví dụ [1] hoặc [3].
 - Chỉ được dùng số từ 1 đến {n}. Tuyệt đối không ghi số nằm ngoài khoảng này.

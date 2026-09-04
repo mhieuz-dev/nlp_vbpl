@@ -239,3 +239,15 @@ def test_prompt_tells_model_what_the_corpus_does_not_contain():
         assert "KHÔNG_TÌM_THẤY" in prompt
     finally:
         ctx.stop()
+
+
+def test_prompt_forbids_naming_document_numbers_not_in_corpus():
+    """Model tự nêu \"Nghị định 123/2021/NĐ-CP\" - số hiệu lấy từ trí nhớ riêng,
+    không có trong kho. Nêu sai số hiệu còn tệ hơn không nêu."""
+    gen, mock_client, ctx = _gen("Trả lời.")
+    try:
+        gen.generate("câu hỏi?", FIVE_CHUNKS)
+        prompt = _sent_messages(mock_client)[-1]["content"].lower()
+        assert "số hiệu" in prompt
+    finally:
+        ctx.stop()
