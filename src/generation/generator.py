@@ -23,6 +23,41 @@ _CITE_RE = re.compile(r"\[(\d+)\]")
 # Bỏ cả trường hợp thẻ mở không có thẻ đóng (phản hồi bị cắt giữa chừng).
 _THINK_RE = re.compile(r"<think>.*?(?:</think>|$)", re.DOTALL | re.IGNORECASE)
 
+# Kho chỉ có luật / bộ luật / hiến pháp. Đo thật trên 48.803 chunk: 0 nghị định,
+# 0 thông tư. Mức phạt hành chính (vượt đèn đỏ, nồng độ cồn, lệ phí...) nằm trong
+# NGHỊ ĐỊNH nên không thể trả lời được. Ngưỡng điểm KHÔNG chặn được: điểm của câu
+# trả lời được (0,861-0,890) chồng lấn câu không trả lời được (0,843-0,864).
+# Nên để chính model phán đoán, đánh dấu bằng một dòng máy đọc được.
+NO_ANSWER_MARKER = "KHÔNG_TÌM_THẤY"
+
+# Trần ngữ cảnh gửi cho model, tính bằng KÝ TỰ (không phải token) để không phải
+# nạp tokenizer. Đo thật trên văn bản luật tiếng Việt: 3,48 ký tự/token.
+#
+# Groq free tier: 8.000 token/phút, tính CẢ input lẫn output. Trừ ~800 token cho
+# câu trả lời và ~450 token cho phần hướng dẫn trong prompt, còn ~6.750 token cho
+# ngữ cảnh. Lấy 16.000 ký tự (~4.600 token) để còn dư cho cửa sổ trượt khi người
+# dùng hỏi liên tiếp.
+#
+# Vì sao cần: điều luật dài rất chênh nhau (118 - 3.163 ký tự). Câu "nồng độ cồn
+# bao nhiêu thì bị phạt" truy xuất trúng 10 điều dài -> 26.887 ký tự -> lỗi 413.
+MAX_CONTEXT_CHARS = 16000
+
+
+def fit_to_context(chunks: list[dict]) -> list[dict]:
+    """Cắt bớt chunk xếp hạng thấp cho vừa trần ngữ cảnh, giữ nguyên thứ tự.
+
+    Phải gọi TRƯỚC khi đánh số nguồn, nếu không model được bảo "có N nguồn"
+    trong khi chỉ nhìn thấy ít hơn, và số trích dẫn sẽ trỏ vào chỗ trống.
+    """
+    kept, used = [], 0
+    for c in chunks:
+        size = len(c["text"])
+        if kept and used + size > MAX_CONTEXT_CHARS:
+            break
+        kept.append(c)
+        used += size
+    return kept
+
 DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
 DEFAULT_MODEL = "gemini-flash-latest"  # 3.6-flash free tier chỉ 20 request/NGÀY
 
@@ -37,6 +72,23 @@ RETRY_DELAYS = (2.0, 5.0)
 PROMPT_TEMPLATE = """Bạn là trợ lý pháp lý chuyên về luật Việt Nam.
 Dựa vào các điều luật được đánh số sau đây, hãy trả lời câu hỏi một cách chính xác và ngắn gọn.
 Chỉ trả lời dựa trên thông tin được cung cấp. Nếu không tìm thấy thông tin, hãy nói rõ.
+
+PHẠM VI KHO DỮ LIỆU - đọc kỹ trước khi trả lời:
+Kho chỉ chứa LUẬT, BỘ LUẬT và HIẾN PHÁP. Kho KHÔNG có nghị định, thông tư,
+quyết định. Do đó các câu hỏi về MỨC PHẠT HÀNH CHÍNH cụ thể (vượt đèn đỏ,
+nồng độ cồn, không đội mũ bảo hiểm...), lệ phí, biểu phí, thủ tục chi tiết
+thường KHÔNG trả lời được, vì chúng nằm trong nghị định.
+
+Trước khi viết câu trả lời, hãy tự hỏi: các điều luật ở dưới có THỰC SỰ trả lời
+đúng câu hỏi không, hay chỉ cùng chủ đề? Nếu chúng chỉ cùng chủ đề mà không
+chứa câu trả lời, hãy trả lời theo đúng khuôn sau:
+
+{marker}
+<một hoặc hai câu giải thích các điều luật được cung cấp không chứa thông tin
+nào, và loại văn bản nào mới chứa nó>
+
+Tuyệt đối KHÔNG ghép các điều luật gần chủ đề lại để tạo ra một câu trả lời
+nghe có vẻ đúng.
 
 QUY TẮC TRÍCH DẪN - bắt buộc tuân thủ:
 - Sau mỗi mệnh đề, ghi số nguồn trong ngoặc vuông, ví dụ [1] hoặc [3].
@@ -95,13 +147,21 @@ class Generator:
         context = "\n\n".join(
             f"[{i}] {c['title']}\n{c['text']}" for i, c in enumerate(chunks, start=1)
         )
-        prompt = PROMPT_TEMPLATE.format(context=context, question=question, n=len(chunks))
+        prompt = PROMPT_TEMPLATE.format(
+            context=context, question=question, n=len(chunks), marker=NO_ANSWER_MARKER
+        )
         response = self._call_with_retry([{"role": "user", "content": prompt}])
 
         raw = response.choices[0].message.content or ""
         answer = _THINK_RE.sub("", raw).strip()
         if not answer:
             answer = "Hệ thống không tạo được câu trả lời cho câu hỏi này."
+
+        answered = not answer.lstrip().upper().startswith(NO_ANSWER_MARKER)
+        if not answered:
+            answer = answer.lstrip()[len(NO_ANSWER_MARKER):].lstrip(" :\n-").strip()
+            return {"answer": answer, "sources": [], "citations": [],
+                    "chunks_used": chunks, "answered": False}
 
         citations = []
         for raw in _CITE_RE.findall(answer):
@@ -114,4 +174,5 @@ class Generator:
             "sources": sources,
             "citations": citations,
             "chunks_used": chunks,
+            "answered": True,
         }

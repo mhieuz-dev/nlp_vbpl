@@ -11,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from src.embeddings.embedder import Embedder
-from src.generation.generator import Generator
+from src.generation.generator import Generator, fit_to_context
 from src.pipeline.rag import RAGPipeline
 from src.vectorstore.store import VectorStore
 
@@ -83,6 +83,9 @@ def run_query_events(pipeline, question: str):
     """
     t0 = time.perf_counter()
     chunks = pipeline.store.query(question, top_k=pipeline.top_k)
+    # Cắt cho vừa trần ngữ cảnh TRƯỚC khi đánh số, để số nguồn model thấy khớp
+    # với số nguồn hiển thị trên giao diện.
+    chunks = fit_to_context(chunks)
     t1 = time.perf_counter()
     retrieve_ms = int((t1 - t0) * 1000)
     yield "step", {"step": "retrieve", "ms": retrieve_ms, "found": len(chunks)}
@@ -103,6 +106,7 @@ def run_query_events(pipeline, question: str):
         "citations": citations,
         "sources": result["sources"],
         "chunks": numbered,
+        "answered": result.get("answered", True),
         "model": pipeline.generator.model_name,
         "timings": {"retrieve_ms": retrieve_ms, "generate_ms": generate_ms},
     }

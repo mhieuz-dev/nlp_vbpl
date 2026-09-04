@@ -199,3 +199,43 @@ def test_citations_ignore_numbers_inside_thinking_block():
         assert gen.generate("câu hỏi?", FIVE_CHUNKS)["citations"] == [1]
     finally:
         ctx.stop()
+
+
+def test_generate_flags_unanswerable_and_strips_marker():
+    """Kho chỉ có luật/bộ luật/hiến pháp - hỏi mức phạt (nằm trong nghị định) thì
+    phải nói không tìm thấy, không được ghép đại từ điều luật gần chủ đề."""
+    gen, _, ctx = _gen(
+        "KHÔNG_TÌM_THẤY\nCác điều luật được cung cấp không quy định mức phạt tiền "
+        "cho hành vi vượt đèn đỏ. Mức phạt này nằm trong nghị định xử phạt vi phạm "
+        "hành chính, không có trong kho."
+    )
+    try:
+        r = gen.generate("Vượt đèn đỏ phạt bao nhiêu?", FIVE_CHUNKS)
+        assert r["answered"] is False
+        assert "KHÔNG_TÌM_THẤY" not in r["answer"]
+        assert r["answer"].startswith("Các điều luật")
+        assert r["citations"] == []
+    finally:
+        ctx.stop()
+
+
+def test_generate_marks_normal_answer_as_answered():
+    gen, _, ctx = _gen("Hợp đồng vô hiệu khi thiếu điều kiện [1].")
+    try:
+        r = gen.generate("câu hỏi?", FIVE_CHUNKS)
+        assert r["answered"] is True
+        assert r["citations"] == [1]
+    finally:
+        ctx.stop()
+
+
+def test_prompt_tells_model_what_the_corpus_does_not_contain():
+    """Model phải biết kho thiếu nghị định để giải thích ĐÚNG lý do không trả lời được."""
+    gen, mock_client, ctx = _gen("Trả lời.")
+    try:
+        gen.generate("câu hỏi?", FIVE_CHUNKS)
+        prompt = _sent_messages(mock_client)[-1]["content"]
+        assert "nghị định" in prompt.lower()
+        assert "KHÔNG_TÌM_THẤY" in prompt
+    finally:
+        ctx.stop()

@@ -107,13 +107,18 @@
   function renderAnswer(payload) {
     var lbl = document.querySelector('#state-answer .lbl b');
     if (lbl && payload.model) lbl.textContent = payload.model;
+    var noAnswer = payload.answered === false;
     document.getElementById('answer-body').innerHTML =
+      (noAnswer ? '<p class="noans">Không tìm thấy câu trả lời trong kho văn bản</p>' : '') +
       '<div class="synth">' + mdToHtml(payload.answer) + '</div>' +
-      renderStatutes(payload);
+      (noAnswer ? '' : renderStatutes(payload));
 
     var top = payload.chunks[0] || {};
     var totalMs = payload.timings.retrieve_ms + payload.timings.generate_ms;
-    var metrics = [
+    var metrics = noAnswer ? [
+      { b: String(payload.chunks.length), s: 'điều đã xét' },
+      { b: (totalMs / 1000).toFixed(1).replace('.', ',') + 's', s: 'phản hồi' }
+    ] : [
       { b: String(payload.chunks.length), s: 'điều trích' },
       { b: String(top.score != null ? top.score : 0).replace('.', ','), s: 'khớp nhất' },
       { b: (totalMs / 1000).toFixed(1).replace('.', ',') + 's', s: 'phản hồi' },

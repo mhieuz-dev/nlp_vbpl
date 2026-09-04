@@ -9,13 +9,14 @@ class FakePipeline:
     top_k = 5
     model_name = "fake-model"
 
-    def __init__(self, chunks=None, answer="Trả lời [1].", raises=None):
+    def __init__(self, chunks=None, answer="Trả lời [1].", raises=None, answered=True):
         self._chunks = chunks if chunks is not None else [{
             "chunk_id": "0_1", "article": 122, "text": "Điều 122. Giao dịch vô hiệu.",
             "title": "Bộ luật Dân sự 2015", "law_type": "bo_luat", "score": 0.9127,
         }]
         self._answer = answer
         self._raises = raises
+        self._answered = answered
         self.store = self
         self.generator = self
 
@@ -26,7 +27,8 @@ class FakePipeline:
         if self._raises:
             raise self._raises
         return {"answer": self._answer, "sources": ["Bộ luật Dân sự 2015"],
-                "citations": [1], "chunks_used": chunks}
+                "citations": [1], "chunks_used": chunks,
+                "answered": self._answered}
 
 
 @pytest.fixture
@@ -132,3 +134,30 @@ def test_ask_keeps_generic_message_for_other_errors(client):
     r = client.post("/api/ask", json={"question": "câu hỏi?"})
     assert "Vui lòng thử lại" in r.json()["error"]
     assert "Gemini timeout" not in r.json()["error"]
+
+
+def test_ask_trims_context_to_budget(client):
+    """Điều luật dài không được đẩy prompt vượt trần của nhà cung cấp."""
+    from src.generation.generator import MAX_CONTEXT_CHARS
+    fat = [{"chunk_id": f"c{i}", "article": i, "text": "x" * 3000,
+            "title": "Luật X", "law_type": "law", "score": 0.9} for i in range(10)]
+    app.dependency_overrides[get_pipeline] = lambda: FakePipeline(chunks=fat)
+    body = client.post("/api/ask", json={"question": "câu hỏi?"}).json()
+    assert len(body["chunks"]) < 10
+    assert sum(len(c["text"]) for c in body["chunks"]) <= MAX_CONTEXT_CHARS
+    # số thứ tự vẫn liên tục 1..N sau khi cắt
+    assert [c["n"] for c in body["chunks"]] == list(range(1, len(body["chunks"]) + 1))
+
+
+def test_ask_passes_through_abstention_flag(client):
+    """Kho không có nghị định -> generator từ chối; cờ phải tới được giao diện."""
+    app.dependency_overrides[get_pipeline] = lambda: FakePipeline(
+        answer="Các điều luật được cung cấp không quy định mức phạt.", answered=False
+    )
+    body = client.post("/api/ask", json={"question": "Vượt đèn đỏ phạt bao nhiêu?"}).json()
+    assert body["answered"] is False
+
+
+def test_ask_defaults_answered_true(client):
+    app.dependency_overrides[get_pipeline] = lambda: FakePipeline()
+    assert client.post("/api/ask", json={"question": "q"}).json()["answered"] is True
