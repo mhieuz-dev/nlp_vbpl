@@ -35,7 +35,13 @@ def get_pipeline() -> RAGPipeline:
         # không tìm được (đo thật: Điều 630 không lọt cả top-30). Bật lên,
         # Recall@5 0.773 -> 0.864, MRR 0.551 -> 0.712.
         store = VectorStore(embedder=embedder, article_lookup=True)
-        generator = Generator()  # đọc LLM_* / GEMINI_API_KEY từ môi trường
+        # Phạm vi kho lấy từ corpus_meta.json (do refresh_corpus.py ghi) chứ
+        # không quét lại 49.063 chunk lúc khởi động. Chưa có file thì
+        # scope_paragraph() im lặng, không đưa ra khẳng định nào.
+        meta = read_meta(CORPUS_META_PATH)
+        law_types = set(meta["law_types"]) if meta else None
+        # đọc LLM_* / GEMINI_API_KEY từ môi trường
+        generator = Generator(law_types=law_types)
         _pipeline = RAGPipeline(store=store, generator=generator)
     return _pipeline
 
