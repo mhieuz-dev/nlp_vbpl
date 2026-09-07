@@ -1,16 +1,24 @@
+# Bí mật
 .env
-data/chroma_db/
-data/test_chroma/
+
+# Ghi chép nội bộ và kế hoạch, không thuộc về mã nguồn
+memory.md
+docs/superpowers/
+
+# Kho vector và cache crawl: sinh lại được, và nặng hàng trăm MB
+data/
+web/vector_map.bin
+web/vector_map.json
+
+# Python
+.venv/
 __pycache__/
 *.pyc
 .pytest_cache/
 *.egg-info/
+
+# Khác
 .cache/
-.venv/
-memory.md
 .gradio/
 .vscode/
-data/
 *.log
-web/vector_map.bin
-web/vector_map.json
