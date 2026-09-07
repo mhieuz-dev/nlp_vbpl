@@ -182,6 +182,9 @@ RSS_PATH = "/cac-van-ban-moi-ban-hanh.rss"
 
 # Tự xưng thật, có địa chỉ liên hệ. robots.txt của họ cho phép (`Allow: /`)
 # nên không có lý do gì phải giả trình duyệt.
+# Mặc định trỏ về trang Space chứ KHÔNG phải email cá nhân: mã nguồn này nằm
+# trên một Space công khai. Trang Space có tab Discussions nên vẫn là chỗ
+# liên hệ thật, mà không lộ địa chỉ riêng của ai. Đổi bằng CRAWLER_CONTACT.
 DEFAULT_CONTACT = "huggingface.co/spaces/mhieuzzz/nlp-vbpl"
 
 
