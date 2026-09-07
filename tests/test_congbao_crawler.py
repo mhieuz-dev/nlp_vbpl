@@ -164,3 +164,21 @@ def test_rss_with_items_is_fine(tmp_path):
     c = build(tmp_path)
     c.crawl_recent()
     assert build(tmp_path).crawl_recent() == []
+
+
+def test_user_agent_contact_comes_from_env(monkeypatch):
+    """Email liên hệ phải đổi được mà không sửa mã nguồn.
+
+    Repo private thì để email cá nhân không sao, nhưng HF Space là công khai.
+    Đồng thời User-Agent vẫn phải LUÔN có một địa chỉ liên hệ - đó là phép lịch
+    sự tối thiểu khi crawl, và robots.txt của họ cho phép chính vì vậy.
+    """
+    from src.ingestion import congbao
+
+    monkeypatch.setenv("CRAWLER_CONTACT", "lienhe@vidu.vn")
+    ua = congbao.user_agent()
+    assert "lienhe@vidu.vn" in ua
+    assert "LuatAI" in ua
+
+    monkeypatch.delenv("CRAWLER_CONTACT", raising=False)
+    assert "contact" in congbao.user_agent().lower()

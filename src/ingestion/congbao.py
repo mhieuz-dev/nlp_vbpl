@@ -17,6 +17,7 @@ Mọi hàm ở đây đều thuần: nhận chuỗi, trả dữ liệu. Phần �
 import hashlib
 import html as html_mod
 import json
+import os
 import re
 import time
 from collections import namedtuple
@@ -181,10 +182,17 @@ RSS_PATH = "/cac-van-ban-moi-ban-hanh.rss"
 
 # Tự xưng thật, có địa chỉ liên hệ. robots.txt của họ cho phép (`Allow: /`)
 # nên không có lý do gì phải giả trình duyệt.
-USER_AGENT = (
-    "LuatAI-student-research/0.1 "
-    "(NLP coursework; contact huggingface.co/spaces/mhieuzzz/nlp-vbpl)"
-)
+DEFAULT_CONTACT = "huggingface.co/spaces/mhieuzzz/nlp-vbpl"
+
+
+def user_agent() -> str:
+    """User-Agent kèm địa chỉ liên hệ, đổi được qua biến CRAWLER_CONTACT.
+
+    Đọc lúc gọi chứ không lúc import: bản deploy công khai đặt email khác với
+    bản chạy ở máy cá nhân, mà mã nguồn thì chung một bản.
+    """
+    contact = os.getenv("CRAWLER_CONTACT", DEFAULT_CONTACT)
+    return f"LuatAI-student-research/0.1 (NLP coursework; contact {contact})"
 
 HTML_DELAY = 2.0
 PDF_DELAY = 4.0
@@ -374,7 +382,7 @@ def http_fetcher(timeout: float = 30.0):
     import requests
 
     session = requests.Session()
-    session.headers["User-Agent"] = USER_AGENT
+    session.headers["User-Agent"] = user_agent()
 
     def fetch(url: str) -> Response:
         last = None

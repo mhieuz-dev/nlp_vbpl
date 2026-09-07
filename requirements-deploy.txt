@@ -1,0 +1,25 @@
+# Phụ thuộc cho bản deploy. KHÁC requirements.txt ở đúng một điểm quan trọng:
+# lấy torch bản CPU. Đo thật ngày 07/09/2026:
+#
+#   venv phát triển (torch CUDA) : 5,9 GB
+#   venv deploy    (torch CPU)   : 1,6 GB   <- torch 750 MB, scipy 109, transformers 96
+#
+# HF Spaces free có 16 GB RAM / 50 GB đĩa nên 1,6 GB thoải mái. Bản CUDA thì
+# vừa thừa (Space không có GPU) vừa làm thời gian build lâu gấp mấy lần.
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+torch
+sentence-transformers>=3.0.0
+chromadb>=0.5.0
+fastapi>=0.110.0
+uvicorn>=0.29.0
+openai>=1.100.0
+python-dotenv>=1.0.0
+requests>=2.31.0
+pymupdf>=1.24.0
+
+# Không có ở đây, và có lý do:
+#   datasets       - chỉ dùng lúc nạp kho lần đầu từ HuggingFace, không dùng khi chạy
+#   ragas          - chỉ dùng lúc đánh giá
+#   scikit-learn   - chỉ dùng cho scripts/export_vector_map.py, chạy offline
+#   pytest         - không chạy test trên bản deploy
