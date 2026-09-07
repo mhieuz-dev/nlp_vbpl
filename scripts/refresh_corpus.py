@@ -12,6 +12,7 @@
 Logic nằm hết trong `src/ingestion/congbao.py`; file này chỉ nối tham số.
 """
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -38,6 +39,9 @@ def main(argv=None):
                       help="dò dải id văn bản (mỗi lần tra tải 0 byte)")
     ap.add_argument("--types", default="", help="lọc loại, ví dụ: decree,circular")
     ap.add_argument("--max-docs", type=int, default=50)
+    ap.add_argument("--save-dir", metavar="DIR",
+                    help="ghi mỗi văn bản crawl được ra một file JSON, để lượt "
+                         "chạy tự động có thứ giữ lại mà không cần tải lại")
     ap.add_argument("--dry-run", action="store_true",
                     help="chỉ crawl và cắt chunk, KHÔNG nạp mô hình, KHÔNG ghi kho")
     args = ap.parse_args(argv)
@@ -58,6 +62,14 @@ def main(argv=None):
     if not docs:
         print("Không có gì mới.")
         return 0
+
+    if args.save_dir:
+        out = Path(args.save_dir)
+        out.mkdir(parents=True, exist_ok=True)
+        for d in docs:
+            (out / f"{d['id']}.json").write_text(
+                json.dumps(d, ensure_ascii=False, indent=1), encoding="utf-8")
+        print(f"đã ghi {len(docs)} file vào {out}/")
 
     chunks = chunk_documents(docs)
     print(f"chunk: {len(chunks)}")

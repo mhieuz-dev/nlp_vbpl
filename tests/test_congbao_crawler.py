@@ -3,7 +3,9 @@ import json
 
 import pytest
 
-from src.ingestion.congbao import BASE_URL, CrawlBlocked, Crawler, Response
+from src.ingestion.congbao import (
+    BASE_URL, CrawlBlocked, Crawler, FeedEmpty, Response,
+)
 
 RSS_URL = f"{BASE_URL}/cac-van-ban-moi-ban-hanh.rss"
 ND_URL = f"{BASE_URL}/van-ban/nghi-dinh-so-168-2024-nd-cp-43733.htm"
@@ -144,3 +146,21 @@ def test_cache_avoids_refetching_bytes(tmp_path):
     c2.state = {}  # quên state, nhưng cache bytes vẫn còn
     c2.crawl_recent()
     assert ND_URL not in c2.fetch.calls
+
+
+def test_empty_rss_is_treated_as_broken_not_as_no_news(tmp_path):
+    """RSS luôn có 50 item. Trả 0 nghĩa là họ đổi format, không phải hết tin.
+
+    Không phân biệt hai ca này thì lượt chạy tự động sẽ báo "không có gì mới"
+    êm ru trong nhiều tháng trong khi thật ra đã hỏng từ lâu.
+    """
+    f = FakeFetcher(pages={RSS_URL: Response(200, {}, b"<rss><channel></channel></rss>")})
+    with pytest.raises(FeedEmpty):
+        build(tmp_path, fetcher=f).crawl_recent()
+
+
+def test_rss_with_items_is_fine(tmp_path):
+    """Có item nhưng đều đã nạp rồi thì đó THẬT SỰ là không có gì mới."""
+    c = build(tmp_path)
+    c.crawl_recent()
+    assert build(tmp_path).crawl_recent() == []

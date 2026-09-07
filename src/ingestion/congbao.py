@@ -202,6 +202,10 @@ class FetchError(RuntimeError):
     """Một văn bản hỏng. Ghi nhận rồi đi tiếp, không làm chết cả lượt."""
 
 
+class FeedEmpty(RuntimeError):
+    """RSS không ra item nào - họ đổi format, chứ không phải hết tin."""
+
+
 class Crawler:
     def __init__(self, fetch, *, sleep=time.sleep, pdf_to_text=None,
                  state_path=None, cache_dir=None):
@@ -218,8 +222,13 @@ class Crawler:
                      law_types: set[str] | None = None) -> list[dict]:
         """Văn bản mới trong RSS. Đây là đường cho lượt chạy hàng ngày."""
         body = self._get(f"{BASE_URL}{RSS_PATH}", HTML_DELAY)
-        urls = [item["url"] for item in parse_rss(body.decode("utf-8", "replace"))]
-        return self._crawl_urls(urls, max_docs, law_types)
+        items = parse_rss(body.decode("utf-8", "replace"))
+        # Feed luôn có 50 item. Rỗng nghĩa là họ đổi format, và im lặng coi đó
+        # là "hết tin" sẽ khiến lượt chạy tự động báo yên ổn suốt nhiều tháng
+        # trong khi thật ra đã hỏng từ lâu.
+        if not items:
+            raise FeedEmpty(f"{BASE_URL}{RSS_PATH} không ra item nào")
+        return self._crawl_urls([i["url"] for i in items], max_docs, law_types)
 
     def crawl_ids(self, doc_ids, max_docs: int | None = None,
                   law_types: set[str] | None = None) -> list[dict]:

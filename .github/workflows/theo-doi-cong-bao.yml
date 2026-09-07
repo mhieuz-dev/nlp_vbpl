@@ -1,0 +1,113 @@
+# Dò văn bản quy phạm pháp luật mới trên Công báo điện tử, mỗi ngày một lần.
+#
+# Vì sao chỉ DÒ mà chưa nạp thẳng vào kho: bước nhúng cần torch + e5-base và
+# cần chính file ChromaDB 612 MB, mà file đó hiện chỉ nằm trên máy cá nhân.
+# Khi nào kho được đưa lên HuggingFace Dataset (bước deploy) thì mới nối được
+# nốt vòng. Xem phần "Bật chế độ nạp thẳng" ở cuối file.
+#
+# Ở dạng hiện tại workflow này vẫn đáng giá:
+#   1. báo có văn bản mới hay không, mỗi sáng;
+#   2. giữ ấm cache bytes thô nên lượt nạp sau không phải tải lại của họ;
+#   3. làm CHIM BÁO BÃO - congbao đổi HTML/RSS là đỏ ngay hôm sau, chứ không
+#      phải ba tháng sau mới phát hiện.
+
+name: Theo dõi Công báo
+
+on:
+  schedule:
+    # 22:00 UTC = 05:00 giờ Việt Nam. Công báo đăng trong giờ hành chính nên
+    # chạy sáng sớm là bắt được trọn ngày hôm trước.
+    - cron: "0 22 * * *"
+  workflow_dispatch:
+    inputs:
+      max_docs:
+        description: "Số văn bản tối đa lấy trong một lượt"
+        default: "20"
+      types:
+        description: "Lọc loại, ví dụ: decree,circular (bỏ trống = lấy tất cả)"
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  # Lượt sau huỷ lượt trước: hai lượt cùng crawl một nguồn vừa vô ích vừa bất lịch sự.
+  group: theo-doi-cong-bao
+  cancel-in-progress: true
+
+jobs:
+  do-van-ban-moi:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      # Đúng hai gói. Đường dò không chạm tới Embedder/VectorStore (chúng được
+      # import muộn trong refresh_corpus.py) nên không cần torch, không cần
+      # chromadb - lượt chạy vì thế tính bằng giây chứ không phải chục phút.
+      - name: Cài phụ thuộc cho việc dò
+        run: pip install "requests>=2.31" "pymupdf>=1.24"
+
+      - name: Khôi phục state và cache bytes thô
+        uses: actions/cache@v4
+        with:
+          path: |
+            data/congbao_state.json
+            data/cache/congbao
+          # Key đổi mỗi lượt để cache luôn được ghi mới; restore-keys kéo về
+          # bản gần nhất. Không có phần này thì mỗi sáng lại báo trùng 50 văn
+          # bản cũ và tải lại PDF của họ một cách vô ích.
+          key: congbao-${{ github.run_id }}
+          restore-keys: congbao-
+
+      - name: Dò văn bản mới
+        id: do
+        run: |
+          set -o pipefail
+          python scripts/refresh_corpus.py \
+            --recent \
+            --max-docs "${{ github.event.inputs.max_docs || '20' }}" \
+            --types "${{ github.event.inputs.types || '' }}" \
+            --save-dir van-ban-moi \
+            --dry-run 2>&1 | tee ket-qua.txt
+          echo "so_luong=$(ls van-ban-moi 2>/dev/null | wc -l)" >> "$GITHUB_OUTPUT"
+
+      - name: Ghi tóm tắt
+        if: always()
+        run: |
+          {
+            echo "## Công báo - $(date -u '+%d/%m/%Y')"
+            echo
+            echo '```'
+            cat ket-qua.txt 2>/dev/null || echo "Lượt chạy hỏng trước khi kịp in gì."
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Chỉ tải lên khi thật sự có văn bản mới, để danh sách artifact không bị
+      # rác bởi những ngày yên ắng.
+      - name: Giữ lại văn bản mới
+        if: steps.do.outputs.so_luong != '0'
+        uses: actions/upload-artifact@v4
+        with:
+          name: van-ban-moi-${{ github.run_number }}
+          path: van-ban-moi/
+          retention-days: 90
+
+# ---------------------------------------------------------------------------
+# Bật chế độ nạp thẳng (sau khi đã deploy)
+#
+# Khi ChromaDB đã nằm trên HuggingFace Dataset, thay bước "Dò văn bản mới" bằng:
+#   - cài thêm torch bản CPU + chromadb + sentence-transformers
+#     (pip install -r requirements-deploy.txt)
+#   - tải kho về từ Dataset repo
+#   - bỏ cờ --dry-run để script tự delete_doc + insert + ghi corpus_meta.json
+#   - đẩy kho đã cập nhật ngược lên Dataset repo bằng secret HF_TOKEN
+#
+# Lượt chạy sẽ nặng lên khoảng 5-8 phút vì phải tải lên/xuống 612 MB và cài
+# torch. Repo public thì vẫn miễn phí, không giới hạn phút.
+# ---------------------------------------------------------------------------
