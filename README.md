@@ -3,12 +3,13 @@ title: luật.ai
 emoji: ⚖️
 colorFrom: green
 colorTo: gray
-sdk: docker
-app_port: 7860
+sdk: gradio
+sdk_version: 6.26.0
+app_file: app.py
 pinned: false
 ---
 
-# luật.ai — hỏi đáp văn bản quy phạm pháp luật Việt Nam
+# luật.ai - hỏi đáp văn bản quy phạm pháp luật Việt Nam
 
 Hệ thống RAG trả lời câu hỏi pháp luật và **dẫn về đúng điều khoản gốc**, thay vì
 tóm tắt chung chung. Đồ án môn Xử lý ngôn ngữ tự nhiên, UEH.

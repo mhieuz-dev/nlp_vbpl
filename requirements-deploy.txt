@@ -19,6 +19,10 @@ requests>=2.31.0
 pymupdf>=1.24.0
 huggingface-hub>=0.24.0
 
+# HF chuyển SDK docker sang gói trả phí (09/2026) nên Space chạy SDK gradio.
+# app.py tự dựng uvicorn phục vụ FastAPI sẵn có; gradio chỉ gắn thêm ở /gradio.
+gradio>=5.0
+
 # Không có ở đây, và có lý do:
 #   datasets       - chỉ dùng lúc nạp kho lần đầu từ HuggingFace, không dùng khi chạy
 #   ragas          - chỉ dùng lúc đánh giá

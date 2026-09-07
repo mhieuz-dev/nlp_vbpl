@@ -1,3 +1,10 @@
+# GIỮ LẠI NHƯNG KHÔNG DÙNG CHO HF SPACES.
+# Tháng 9/2026 HuggingFace chuyển SDK `docker` sang gói trả phí, chỉ còn
+# `static` và `gradio` miễn phí, nên bản chạy trên Space đi qua `app.py`
+# (SDK gradio, tự dựng uvicorn). File này vẫn đúng và vẫn build được - để dành
+# cho nơi khác chấp nhận container (Cloud Run, Render, máy chủ tự quản) và để
+# chứng minh stack chạy được với torch CPU.
+#
 # Bản chạy trên HuggingFace Spaces (SDK docker). Space không có GPU nên dùng
 # torch bản CPU: 1,6 GB thay vì 5,9 GB, và build nhanh hơn nhiều.
 FROM python:3.10-slim
