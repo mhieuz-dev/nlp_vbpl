@@ -14,9 +14,15 @@ tải trang, mà mỗi lần tra tốn 0 byte.
 
 Mọi hàm ở đây đều thuần: nhận chuỗi, trả dữ liệu. Phần đi mạng nằm riêng.
 """
+import hashlib
 import html as html_mod
+import json
 import re
+import time
+from collections import namedtuple
+from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
+from pathlib import Path
 
 BASE_URL = "https://congbao.chinhphu.vn"
 
@@ -164,3 +170,217 @@ def _rfc822_to_iso(value: str) -> str:
         return parsedate_to_datetime(value).strftime("%Y-%m-%d")
     except (TypeError, ValueError):
         return ""
+
+
+# ---------------------------------------------------------------------------
+# Phần đi mạng. Fetcher / sleeper / bộ bóc PDF đều tiêm vào để test không cần
+# mạng, không cần pymupdf, và chạy trong mili giây.
+# ---------------------------------------------------------------------------
+
+RSS_PATH = "/cac-van-ban-moi-ban-hanh.rss"
+
+# Tự xưng thật, có địa chỉ liên hệ. robots.txt của họ cho phép (`Allow: /`)
+# nên không có lý do gì phải giả trình duyệt.
+USER_AGENT = (
+    "LuatAI-student-research/0.1 "
+    "(NLP coursework; contact huggingface.co/spaces/mhieuzzz/nlp-vbpl)"
+)
+
+HTML_DELAY = 2.0
+PDF_DELAY = 4.0
+# Dò id chỉ đọc header 302, tải 0 byte, nên nhẹ hơn hẳn một lượt tải trang.
+PROBE_DELAY = 1.5
+
+Response = namedtuple("Response", "status headers body")
+
+
+class CrawlBlocked(RuntimeError):
+    """Máy chủ trả 403 - họ bắt đầu chặn. Dừng cả lượt, không thử lại."""
+
+
+class FetchError(RuntimeError):
+    """Một văn bản hỏng. Ghi nhận rồi đi tiếp, không làm chết cả lượt."""
+
+
+class Crawler:
+    def __init__(self, fetch, *, sleep=time.sleep, pdf_to_text=None,
+                 state_path=None, cache_dir=None):
+        self.fetch = fetch
+        self.sleep = sleep
+        self.pdf_to_text = pdf_to_text or pdf_bytes_to_text
+        self.state_path = Path(state_path) if state_path else None
+        self.cache_dir = Path(cache_dir) if cache_dir else None
+        self.state = self._load_state()
+
+    # -- công khai ---------------------------------------------------------
+
+    def crawl_recent(self, max_docs: int | None = 50,
+                     law_types: set[str] | None = None) -> list[dict]:
+        """Văn bản mới trong RSS. Đây là đường cho lượt chạy hàng ngày."""
+        body = self._get(f"{BASE_URL}{RSS_PATH}", HTML_DELAY)
+        urls = [item["url"] for item in parse_rss(body.decode("utf-8", "replace"))]
+        return self._crawl_urls(urls, max_docs, law_types)
+
+    def crawl_ids(self, doc_ids, max_docs: int | None = None,
+                  law_types: set[str] | None = None) -> list[dict]:
+        """Dò một dải id. Đây là đường backfill có chủ đích.
+
+        Lọc theo `law_types` xảy ra ngay trên slug lấy được từ header 302,
+        nên văn bản không quan tâm thì không tốn lượt tải trang nào.
+        """
+        urls = []
+        for doc_id in doc_ids:
+            if max_docs is not None and len(urls) >= max_docs:
+                break
+            url = self.resolve_id(str(doc_id))
+            if url and (not law_types or parse_slug(url)["law_type"] in law_types):
+                urls.append(url)
+        return self._crawl_urls(urls, max_docs, law_types)
+
+    def resolve_id(self, doc_id: str) -> str | None:
+        """id -> URL canonical, đọc từ header `Location` của 302. Tải 0 byte."""
+        self.sleep(PROBE_DELAY)
+        res = self.fetch(f"{BASE_URL}/van-ban/x-{doc_id}.htm")
+        if res.status == 403:
+            raise CrawlBlocked(f"403 khi dò id {doc_id}")
+        location = (res.headers or {}).get("location", "")
+        if res.status in (301, 302) and parse_slug(location):
+            return location if location.startswith("http") else BASE_URL + location
+        return None
+
+    def fetch_document(self, url: str) -> dict | None:
+        """Tải + bóc một văn bản. Trả None nếu PDF không đổi so với lần trước."""
+        slug = parse_slug(url)
+        if slug is None:
+            return None
+        doc_id = slug["doc_id"]
+
+        html = self._get(url, HTML_DELAY, f"{doc_id}.html")
+        detail = parse_detail(html.decode("utf-8", "replace"))
+        if not detail["pdf_urls"]:
+            raise FetchError(f"{url}: trang không có PDF đính kèm")
+
+        blobs = [self._get(p, PDF_DELAY, f"{doc_id}-{i}.pdf")
+                 for i, p in enumerate(detail["pdf_urls"])]
+
+        # PDF Công báo bất biến sau khi công bố, nên hash không đổi là bỏ qua
+        # được cả bóc text lẫn embed - lượt chạy hàng ngày gần như miễn phí.
+        digest = hashlib.sha256(b"".join(blobs)).hexdigest()
+        seen = self.state.get(doc_id, {})
+        if seen.get("status") == "ok" and seen.get("sha256") == digest:
+            return None
+
+        text = clean_pdf_text("\n".join(self.pdf_to_text(b) for b in blobs))
+        doc = to_document(url, detail, text)
+        doc["sha256"] = digest
+        return doc
+
+    # -- nội bộ ------------------------------------------------------------
+
+    def _crawl_urls(self, urls, max_docs, law_types) -> list[dict]:
+        docs = []
+        for url in urls:
+            if max_docs is not None and len(docs) >= max_docs:
+                break
+            slug = parse_slug(url)
+            if slug is None:
+                continue
+            if law_types and slug["law_type"] not in law_types:
+                continue
+            doc_id = slug["doc_id"]
+            if self.state.get(doc_id, {}).get("status") == "ok":
+                continue
+            try:
+                doc = self.fetch_document(url)
+            except FetchError as exc:
+                self._record(doc_id, {"status": "error", "url": url, "error": str(exc)})
+                continue
+            if doc is None:
+                continue
+            docs.append(doc)
+            self._record(doc_id, {
+                "status": "ok",
+                "url": url,
+                "sha256": doc["sha256"],
+                "issue_date": doc["issue_date"],
+                "law_type": doc["law_type"],
+                "chars": len(doc["content"]),
+            })
+        return docs
+
+    def _get(self, url: str, delay: float, cache_name: str | None = None) -> bytes:
+        """Tải một URL, ưu tiên cache bytes thô đã lưu.
+
+        Cache là thứ đáng giá nhất ở đây: chỉnh lại bộ lọc rác rồi chạy lại
+        hàng chục lần mà không tốn một request nào của họ.
+        """
+        cached = self.cache_dir / cache_name if (self.cache_dir and cache_name) else None
+        if cached is not None and cached.exists():
+            return cached.read_bytes()
+
+        self.sleep(delay)
+        res = self.fetch(url)
+        if res.status == 403:
+            raise CrawlBlocked(f"403 tại {url} - dừng cả lượt crawl")
+        if res.status != 200:
+            raise FetchError(f"{url}: HTTP {res.status}")
+
+        if cached is not None:
+            cached.parent.mkdir(parents=True, exist_ok=True)
+            cached.write_bytes(res.body)
+        return res.body
+
+    def _record(self, doc_id: str, entry: dict) -> None:
+        """Ghi state sau MỖI văn bản, để bị kill giữa chừng vẫn chạy tiếp được."""
+        entry["fetched_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        self.state[doc_id] = entry
+        if self.state_path:
+            self.state_path.parent.mkdir(parents=True, exist_ok=True)
+            self.state_path.write_text(
+                json.dumps(self.state, ensure_ascii=False, indent=1), encoding="utf-8")
+
+    def _load_state(self) -> dict:
+        if self.state_path and self.state_path.exists():
+            return json.loads(self.state_path.read_text(encoding="utf-8"))
+        return {}
+
+
+def pdf_bytes_to_text(data: bytes) -> str:
+    """Bóc text PDF. `sort=True` để bảng mức phạt không bị xáo thứ tự đọc."""
+    import pymupdf
+
+    with pymupdf.open(stream=data, filetype="pdf") as doc:
+        return "\n".join(page.get_text("text", sort=True) for page in doc)
+
+
+# Chỉ thử lại với lỗi tạm thời. 403 KHÔNG nằm ở đây: đó là họ chặn, thử lại
+# là phản ứng sai và còn làm tình hình tệ hơn.
+RETRY_STATUSES = (429, 500, 502, 503, 504)
+RETRY_DELAYS = (2.0, 8.0, 30.0)
+
+
+def http_fetcher(timeout: float = 30.0):
+    """Fetcher thật cho `Crawler`. Không tự đi theo redirect vì `resolve_id`
+    cần đọc chính header `Location` đó."""
+    import requests
+
+    session = requests.Session()
+    session.headers["User-Agent"] = USER_AGENT
+
+    def fetch(url: str) -> Response:
+        last = None
+        for attempt, wait in enumerate((0.0,) + RETRY_DELAYS):
+            if wait:
+                time.sleep(wait)
+            try:
+                res = session.get(url, timeout=timeout, allow_redirects=False)
+            except requests.RequestException as exc:
+                last = Response(0, {}, str(exc).encode())
+                continue
+            if res.status_code not in RETRY_STATUSES:
+                headers = {k.lower(): v for k, v in res.headers.items()}
+                return Response(res.status_code, headers, res.content)
+            last = Response(res.status_code, {}, b"")
+        return last
+
+    return fetch
