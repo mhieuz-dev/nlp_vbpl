@@ -54,6 +54,13 @@ def fit_to_context(chunks: list[dict]) -> list[dict]:
         size = len(c["text"])
         if kept and used + size > MAX_CONTEXT_CHARS:
             break
+        if size > MAX_CONTEXT_CHARS:
+            # Chunk đầu bảng dài hơn cả trần thì cắt cụt, đừng thả nguyên: kho
+            # có 35 chunk vượt 16.000 ký tự (dài nhất 116.731), gửi nguyên là
+            # ~33.000 token và Groq trả 413 Request too large (trần 8.000).
+            # Tạo dict mới vì chunk gốc còn dùng để hiện nguồn trên giao diện.
+            c = {**c, "text": c["text"][:MAX_CONTEXT_CHARS]}
+            size = MAX_CONTEXT_CHARS
         kept.append(c)
         used += size
     return kept
