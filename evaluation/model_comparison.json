@@ -1,0 +1,14 @@
+{
+  "multilingual_e5_base": {
+    "hit_rate": 1.0,
+    "avg_retrieval_score": 0.8765,
+    "hits": 10,
+    "total": 10
+  },
+  "vietnamese_sbert": {
+    "hit_rate": 1.0,
+    "avg_retrieval_score": 0.6207,
+    "hits": 10,
+    "total": 10
+  }
+}

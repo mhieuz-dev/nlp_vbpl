@@ -1,7 +1,6 @@
 import pytest
 from fastapi.testclient import TestClient
 
-import server
 from server import app, get_pipeline
 
 
