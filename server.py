@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 from src.embeddings.embedder import Embedder
 from src.generation.generator import Generator, fit_to_context
 from src.ingestion.corpus_meta import DEFAULT_PATH, read_meta
+from src.vectorstore.bootstrap import ensure_corpus
 from src.pipeline.rag import RAGPipeline
 from src.vectorstore.store import VectorStore
 
@@ -29,6 +30,20 @@ def get_pipeline() -> RAGPipeline:
     """Khởi tạo pipeline một lần rồi tái sử dụng. Nạp model mất 30-60s."""
     global _pipeline
     if _pipeline is None:
+        # Đĩa của HF Space là tạm nên kho phải tải về mỗi lần khởi động.
+        # Ở máy cá nhân kho đã nằm sẵn trong data/ nên hàm này không làm gì.
+        try:
+            ensure_corpus()
+        except RuntimeError as exc:
+            # Lỗi này xảy ra ở tầng Depends, TRƯỚC thân route, nên
+            # _error_message() không chạy tới. Không đổi thành HTTPException
+            # thì người dùng chỉ thấy "Internal Server Error" trần trụi.
+            logger.error("Kho chưa sẵn sàng: %s", exc)
+            raise HTTPException(
+                status_code=503,
+                detail="Kho dữ liệu chưa sẵn sàng. Máy chủ đang khởi động hoặc "
+                       "chưa được cấu hình nguồn kho; thử lại sau ít phút.",
+            ) from exc
         embedder = Embedder()
         # article_lookup: câu hỏi nêu đích danh "Điều N" thì dense gần như
         # không tìm được (đo thật: Điều 630 không lọt cả top-30). Bật lên,

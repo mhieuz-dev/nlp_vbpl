@@ -1,0 +1,10 @@
+# Kho 612 MB được tải từ HuggingFace Dataset lúc khởi động, không nướng vào ảnh.
+data/
+.venv/
+.git/
+__pycache__/
+*.pyc
+.pytest_cache/
+docs/
+evaluation/*.json
+web/vector_map.*

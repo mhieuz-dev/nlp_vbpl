@@ -17,6 +17,7 @@ openai>=1.100.0
 python-dotenv>=1.0.0
 requests>=2.31.0
 pymupdf>=1.24.0
+huggingface-hub>=0.24.0
 
 # Không có ở đây, và có lý do:
 #   datasets       - chỉ dùng lúc nạp kho lần đầu từ HuggingFace, không dùng khi chạy
