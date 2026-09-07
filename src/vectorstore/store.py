@@ -12,6 +12,22 @@ _DIEU_RE = re.compile(r"^\s*Điều\s+(\d+)")
 # các bản sao chiếm hết chỗ (đo thật: top-10 chỉ còn 4 điều khác nhau).
 DEDUP_OVERFETCH = 4
 
+# Ba trường này chỉ có ở văn bản crawl từ Công báo. 48.803 chunk nạp từ
+# HuggingFace không có, nên mọi chỗ đọc đều phải .get(..., "").
+OPTIONAL_META = ("issue_date", "source_url", "doc_number")
+
+
+def _prefer(new: dict, old: dict) -> bool:
+    """Hai chunk trùng khoá so trùng thì có nên thay bản cũ bằng bản mới không.
+
+    Công báo là kho CÔNG BỐ, không có trường "còn hiệu lực": NĐ 100/2019 và
+    NĐ 168/2024 thay thế nó cùng nằm trong kho và giống nhau gần hết 160 ký tự
+    đầu. Không phân xử theo ngày thì bản nào sống sót là ngẫu nhiên, và người
+    hỏi có thể nhận đúng mức phạt của văn bản đã bị bãi bỏ. Ngày rỗng thua mọi
+    ngày thật, nên chunk cũ không đá được chunk có ngày ra ngoài.
+    """
+    return new.get("issue_date", "") > old.get("issue_date", "")
+
 
 def _dedup_key(text: str) -> str:
     """Khoá so trùng: bỏ dấu tiếng Việt, bỏ ký tự không phải chữ-số, lấy 160 ký tự đầu."""
@@ -48,6 +64,7 @@ class VectorStore:
                     "doc_id": c["doc_id"],
                     "title": c["title"],
                     "law_type": c["law_type"],
+                    **{k: c.get(k, "") for k in OPTIONAL_META},
                 } for c in batch],
             )
             print(f"  Indexed {min(i + self.BATCH_SIZE, len(chunks))}/{len(chunks)} chunks...")
@@ -61,7 +78,19 @@ class VectorStore:
             "title": meta["title"],
             "law_type": meta["law_type"],
             "score": score,
+            **{k: meta.get(k, "") for k in OPTIONAL_META},
         }
+
+    def delete_doc(self, doc_id: str) -> int:
+        """Xoá mọi chunk của một văn bản, trả về số chunk đã xoá.
+
+        Phải gọi trước khi nạp lại: upsert chỉ ghi đè theo chunk_id, nên lần
+        crawl sau ra ít chunk hơn thì phần dư của lần trước nằm lại vĩnh viễn.
+        """
+        ids = self.collection.get(where={"doc_id": doc_id})["ids"]
+        if ids:
+            self.collection.delete(ids=ids)
+        return len(ids)
 
     def _lookup_by_article(self, query_text: str) -> list[dict]:
         """Chunk của điều luật được nêu đích danh trong câu hỏi, nếu có."""
@@ -87,15 +116,22 @@ class VectorStore:
             include=["documents", "metadatas", "distances"],
         )
         output = []
-        seen = set()
+        seen = {}  # khoá so trùng -> vị trí trong output
+
+        def take(chunk) -> bool:
+            """Nhận một chunk, trả True khi output đã đủ top_k."""
+            key = _dedup_key(chunk["text"])
+            pos = seen.get(key)
+            if pos is None:
+                seen[key] = len(output)
+                output.append(chunk)
+            elif _prefer(chunk, output[pos]):
+                output[pos] = chunk
+            return len(output) == top_k
+
         if self.article_lookup:
             for chunk in self._lookup_by_article(query_text):
-                key = _dedup_key(chunk["text"])
-                if key in seen:
-                    continue
-                seen.add(key)
-                output.append(chunk)
-                if len(output) == top_k:
+                if take(chunk):
                     return output
         for cid, doc, meta, dist in zip(
             results["ids"][0],
@@ -103,19 +139,6 @@ class VectorStore:
             results["metadatas"][0],
             results["distances"][0],
         ):
-            key = _dedup_key(doc)
-            if key in seen:
-                continue
-            seen.add(key)
-            m = _DIEU_RE.match(doc)
-            output.append({
-                "chunk_id": cid,
-                "article": int(m.group(1)) if m else None,
-                "text": doc,
-                "title": meta["title"],
-                "law_type": meta["law_type"],
-                "score": round(1 - dist, 4),
-            })
-            if len(output) == top_k:
+            if take(self._to_chunk(cid, doc, meta, round(1 - dist, 4))):
                 break
         return output

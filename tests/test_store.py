@@ -118,3 +118,83 @@ def test_query_without_article_reference_is_unchanged(article_store):
     results = article_store.query("di chúc hợp pháp", top_k=2)
     assert len(results) <= 2
     assert all("article" in r for r in results)
+
+
+@pytest.fixture
+def meta_store():
+    return VectorStore(embedder=Embedder(), collection_name="test_meta",
+                       persist_dir="./data/test_chroma")
+
+
+def test_new_metadata_round_trips(meta_store):
+    meta_store.insert([{
+        "chunk_id": "nd_0", "doc_id": "congbao-43733", "title": "Nghị định 168/2024/NĐ-CP",
+        "law_type": "decree", "text": "Điều 6. Không chấp hành hiệu lệnh đèn tín hiệu.",
+        "char_start": 0, "issue_date": "2024-12-26",
+        "source_url": "https://congbao.chinhphu.vn/van-ban/x-43733.htm",
+        "doc_number": "168/2024/NĐ-CP",
+    }])
+    got = meta_store.query("đèn tín hiệu", top_k=1)[0]
+    assert got["issue_date"] == "2024-12-26"
+    assert got["doc_number"] == "168/2024/NĐ-CP"
+    assert got["source_url"].endswith("x-43733.htm")
+
+
+def test_chunks_without_new_metadata_still_work(meta_store):
+    """48.803 chunk cũ trong kho không có ba trường này, không được vỡ."""
+    meta_store.insert([{
+        "chunk_id": "old_0", "doc_id": "old", "title": "Bộ luật Dân sự",
+        "law_type": "code", "text": "Điều 90. Quy định cũ không có metadata mới.",
+        "char_start": 0,
+    }])
+    got = meta_store.query("quy định cũ không có metadata", top_k=1)[0]
+    assert got["issue_date"] == ""
+    assert got["source_url"] == ""
+
+
+def test_newer_document_wins_dedup_collision():
+    """NĐ hết hiệu lực và NĐ thay thế nó gần như giống hệt 160 ký tự đầu.
+
+    Không phân xử theo ngày thì bản nào sống sót là ngẫu nhiên, và người dùng
+    có thể nhận đúng mức phạt của văn bản đã bị bãi bỏ.
+    """
+    from src.vectorstore.store import _prefer
+    cu = {"issue_date": "2019-12-30"}
+    moi = {"issue_date": "2024-12-26"}
+    assert _prefer(moi, cu) is True
+    assert _prefer(cu, moi) is False
+    # không có ngày thì không được đá văn bản có ngày ra
+    assert _prefer({"issue_date": ""}, moi) is False
+    assert _prefer(moi, {"issue_date": ""}) is True
+    assert _prefer({"issue_date": ""}, {"issue_date": ""}) is False
+
+
+@pytest.fixture
+def recency_store():
+    return VectorStore(embedder=Embedder(), collection_name="test_recency",
+                       persist_dir="./data/test_chroma")
+
+
+def test_query_keeps_newer_of_two_identical_chunks(recency_store):
+    text = "Điều 6. Phạt tiền đối với hành vi không chấp hành hiệu lệnh đèn tín hiệu."
+    recency_store.insert([
+        {"chunk_id": "cu_0", "doc_id": "cu", "title": "Nghị định 100/2019/NĐ-CP",
+         "law_type": "decree", "text": text, "char_start": 0, "issue_date": "2019-12-30"},
+        {"chunk_id": "moi_0", "doc_id": "moi", "title": "Nghị định 168/2024/NĐ-CP",
+         "law_type": "decree", "text": text, "char_start": 0, "issue_date": "2024-12-26"},
+    ])
+    got = recency_store.query("không chấp hành hiệu lệnh đèn tín hiệu", top_k=5)
+    same = [c for c in got if c["text"] == text]
+    assert len(same) == 1, "hai bản giống hệt phải bị gộp làm một"
+    assert same[0]["issue_date"] == "2024-12-26"
+
+
+def test_delete_doc_removes_all_its_chunks(meta_store):
+    """Crawl lại sau khi sửa bộ lọc có thể ra ít chunk hơn; không xoá trước thì
+    những chunk thừa của lần trước nằm lại vĩnh viễn."""
+    chunks = [{"chunk_id": f"del_{i}", "doc_id": "todelete", "title": "Văn bản tạm",
+               "law_type": "decree", "text": f"Điều {i}. Nội dung tạm để xoá.",
+               "char_start": 0} for i in range(3)]
+    meta_store.insert(chunks)
+    assert meta_store.delete_doc("todelete") == 3
+    assert meta_store.delete_doc("todelete") == 0

@@ -47,6 +47,11 @@ def chunk_documents(docs: list[dict]) -> list[dict]:
                 "law_type": doc["law_type"],
                 "text": text,
                 "char_start": content.find(text),
+                # Văn bản từ HuggingFace không có ba trường này; .get để chúng
+                # đi được tới vectorstore mà không làm vỡ đường nạp cũ.
+                "issue_date": doc.get("issue_date", ""),
+                "source_url": doc.get("source_url", ""),
+                "doc_number": doc.get("doc_number", ""),
             })
     return chunks
 
