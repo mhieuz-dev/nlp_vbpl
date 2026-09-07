@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 
 from src.embeddings.embedder import Embedder
 from src.generation.generator import Generator, fit_to_context
+from src.ingestion.corpus_meta import DEFAULT_PATH, read_meta
 from src.pipeline.rag import RAGPipeline
 from src.vectorstore.store import VectorStore
 
@@ -20,6 +21,9 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 _pipeline = None
+
+# Cho test thay được bằng monkeypatch.
+CORPUS_META_PATH = DEFAULT_PATH
 
 
 def get_pipeline() -> RAGPipeline:
@@ -151,6 +155,16 @@ def ask(req: AskRequest, pipeline=Depends(get_pipeline)):
             status_code=502,
             content={"error": _error_message(exc)},
         )
+
+
+@app.get("/api/corpus")
+def corpus():
+    """Thống kê kho cho nhãn ngày trên giao diện.
+
+    Trả null (kèm 200) khi chưa chạy refresh lần nào - đó là trạng thái hợp lệ,
+    không phải lỗi máy chủ. Giao diện tự biết giữ số mặc định.
+    """
+    return read_meta(CORPUS_META_PATH)
 
 
 def _sse(event: str, data: dict) -> str:

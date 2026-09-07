@@ -117,8 +117,9 @@
     coords = new Float32Array(res[0]);
     count = res[1].count;
     res[1].ids.forEach(function (id, i) { idIndex[id] = i; });
-    var el = document.getElementById('corpus-count');
-    if (el) el.textContent = count.toLocaleString('vi-VN');
+    /* Không ghi #corpus-count ở đây nữa: vector_map.json là artifact đồ hoạ,
+       chụp lại kho ở thời điểm chạy export_vector_map.py, nên nó tụt hậu ngay
+       sau lần crawl kế tiếp. Con số đó do app.js lấy từ /api/corpus. */
     resize();
     draw();
   }).catch(function () {

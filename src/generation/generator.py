@@ -23,11 +23,9 @@ _CITE_RE = re.compile(r"\[(\d+)\]")
 # Bỏ cả trường hợp thẻ mở không có thẻ đóng (phản hồi bị cắt giữa chừng).
 _THINK_RE = re.compile(r"<think>.*?(?:</think>|$)", re.DOTALL | re.IGNORECASE)
 
-# Kho chỉ có luật / bộ luật / hiến pháp. Đo thật trên 48.803 chunk: 0 nghị định,
-# 0 thông tư. Mức phạt hành chính (vượt đèn đỏ, nồng độ cồn, lệ phí...) nằm trong
-# NGHỊ ĐỊNH nên không thể trả lời được. Ngưỡng điểm KHÔNG chặn được: điểm của câu
-# trả lời được (0,861-0,890) chồng lấn câu không trả lời được (0,843-0,864).
-# Nên để chính model phán đoán, đánh dấu bằng một dòng máy đọc được.
+# Ngưỡng điểm KHÔNG chặn được câu không trả lời được: điểm của câu trả lời được
+# (0,861-0,890) chồng lấn câu không trả lời được (0,843-0,864). Nên để chính
+# model phán đoán, đánh dấu bằng một dòng máy đọc được.
 NO_ANSWER_MARKER = "KHÔNG_TÌM_THẤY"
 
 # Trần ngữ cảnh gửi cho model, tính bằng KÝ TỰ (không phải token) để không phải
@@ -80,11 +78,7 @@ PROMPT_TEMPLATE = """Bạn là trợ lý pháp lý chuyên về luật Việt Na
 Dựa vào các điều luật được đánh số sau đây, hãy trả lời câu hỏi một cách chính xác và ngắn gọn.
 Chỉ trả lời dựa trên thông tin được cung cấp. Nếu không tìm thấy thông tin, hãy nói rõ.
 
-PHẠM VI KHO DỮ LIỆU - đọc kỹ trước khi trả lời:
-Kho chỉ chứa LUẬT, BỘ LUẬT và HIẾN PHÁP. Kho KHÔNG có nghị định, thông tư,
-quyết định. Do đó các câu hỏi về MỨC PHẠT HÀNH CHÍNH cụ thể (vượt đèn đỏ,
-nồng độ cồn, không đội mũ bảo hiểm...), lệ phí, biểu phí, thủ tục chi tiết
-thường KHÔNG trả lời được, vì chúng nằm trong nghị định.
+{scope}
 
 Trước khi viết câu trả lời, hãy tự hỏi: các điều luật ở dưới có THỰC SỰ trả lời
 đúng câu hỏi không, hay chỉ cùng chủ đề? Nếu chúng chỉ cùng chủ đề mà không
@@ -98,9 +92,10 @@ Tuyệt đối KHÔNG ghép các điều luật gần chủ đề lại để t�
 nghe có vẻ đúng.
 
 Khi nói loại văn bản nào mới chứa câu trả lời, chỉ nêu LOẠI (ví dụ "nghị định
-xử phạt vi phạm hành chính trong lĩnh vực giao thông"). TUYỆT ĐỐI không nêu số
-hiệu cụ thể (kiểu "Nghị định 123/2021/NĐ-CP") vì số hiệu đó không có trong kho
-và nêu sai còn tệ hơn không nêu.
+xử phạt vi phạm hành chính trong lĩnh vực giao thông"). Chỉ được nêu số hiệu
+cụ thể nếu số hiệu đó xuất hiện NGUYÊN VĂN trong các nguồn ở dưới; số hiệu tự
+nhớ ra (kiểu "Nghị định 123/2021/NĐ-CP") thì tuyệt đối không nêu, vì nêu sai
+còn tệ hơn không nêu.
 
 QUY TẮC TRÍCH DẪN - bắt buộc tuân thủ:
 - Sau mỗi mệnh đề, ghi số nguồn trong ngoặc vuông, ví dụ [1] hoặc [3].
@@ -120,6 +115,50 @@ Câu hỏi: {question}
 Câu trả lời:"""
 
 
+_TYPE_NAMES = {
+    "law": "LUẬT", "code": "BỘ LUẬT", "constitution": "HIẾN PHÁP",
+    "decree": "NGHỊ ĐỊNH", "circular": "THÔNG TƯ", "decision": "QUYẾT ĐỊNH",
+    "resolution": "NGHỊ QUYẾT", "ordinance": "PHÁP LỆNH",
+    "directive": "CHỈ THỊ", "consolidated": "VĂN BẢN HỢP NHẤT",
+}
+
+# Chỉ hai loại này đáng nói khi thiếu: mức phạt hành chính, lệ phí, biểu phí và
+# thủ tục chi tiết đều nằm ở đây, và đó là phần lớn câu hỏi đời thường.
+_NOTABLE_TYPES = {"decree": "nghị định", "circular": "thông tư"}
+
+
+def scope_paragraph(law_types) -> str:
+    """Mô tả phạm vi kho, SINH TỪ law_type có thật chứ không viết cứng.
+
+    Bản viết cứng cũ ("Kho KHÔNG có nghị định") đúng khi kho chỉ có dữ liệu
+    HuggingFace, nhưng thành lời nói dối ngay khi crawl được nghị định đầu
+    tiên - và model sẽ trả KHÔNG_TÌM_THẤY cho đúng câu nó vừa trả lời được.
+    Chưa biết kho có gì thì không nói gì, thà thiếu còn hơn nói sai.
+    """
+    if not law_types:
+        return ""
+    have = ", ".join(_TYPE_NAMES.get(t, t.upper()) for t in sorted(law_types))
+    lines = ["PHẠM VI KHO DỮ LIỆU - đọc kỹ trước khi trả lời:",
+             f"Kho chứa các loại văn bản: {have}."]
+    absent = [name for key, name in _NOTABLE_TYPES.items() if key not in law_types]
+    if absent:
+        lines.append(
+            f"Kho KHÔNG có {' và '.join(absent)}. Câu hỏi về MỨC PHẠT HÀNH CHÍNH "
+            "cụ thể, lệ phí, biểu phí hay thủ tục chi tiết thường nằm ở đó nên "
+            "KHÔNG trả lời được từ kho này.")
+    return "\n".join(lines)
+
+
+def build_prompt(question: str, chunks: list[dict], law_types=None) -> str:
+    context = "\n\n".join(
+        f"[{i}] {c['title']}\n{c['text']}" for i, c in enumerate(chunks, start=1)
+    )
+    return PROMPT_TEMPLATE.format(
+        context=context, question=question, n=len(chunks),
+        marker=NO_ANSWER_MARKER, scope=scope_paragraph(law_types),
+    )
+
+
 def _is_overloaded(exc: Exception) -> bool:
     s = str(exc)
     return any(k in s for k in ("503", "UNAVAILABLE", "high demand", "overloaded"))
@@ -131,7 +170,11 @@ def _rejects_reasoning_effort(exc: Exception) -> bool:
 
 
 class Generator:
-    def __init__(self, api_key: str = None, model_name: str = None, base_url: str = None):
+    def __init__(self, api_key: str = None, model_name: str = None, base_url: str = None,
+                 law_types=None):
+        # law_types do người dựng Generator truyền vào (đọc từ corpus_meta.json),
+        # vì Generator không biết gì về vectorstore.
+        self.law_types = law_types
         self.model_name = model_name or os.getenv("LLM_MODEL", DEFAULT_MODEL)
         self.client = OpenAI(
             api_key=api_key or os.getenv("LLM_API_KEY") or os.getenv("GEMINI_API_KEY"),
@@ -156,12 +199,7 @@ class Generator:
                 time.sleep(delay)
 
     def generate(self, question: str, chunks: list[dict]) -> dict:
-        context = "\n\n".join(
-            f"[{i}] {c['title']}\n{c['text']}" for i, c in enumerate(chunks, start=1)
-        )
-        prompt = PROMPT_TEMPLATE.format(
-            context=context, question=question, n=len(chunks), marker=NO_ANSWER_MARKER
-        )
+        prompt = build_prompt(question, chunks, self.law_types)
         response = self._call_with_retry([{"role": "user", "content": prompt}])
 
         raw = response.choices[0].message.content or ""

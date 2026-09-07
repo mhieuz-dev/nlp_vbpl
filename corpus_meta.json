@@ -1,0 +1,12 @@
+{
+  "chunks": 49063,
+  "documents": 624,
+  "law_types": {
+    "code": 7877,
+    "law": 40809,
+    "constitution": 117,
+    "decree": 260
+  },
+  "newest_issue_date": "2024-12-26",
+  "last_refreshed": "2026-09-07"
+}

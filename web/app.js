@@ -214,5 +214,33 @@
     });
   });
 
+  // Thống kê kho lấy từ máy chủ chứ không viết cứng trong HTML: con số viết
+  // cứng sẽ sai ngay lần crawl kế tiếp, mà đó lại đúng là thứ người dùng nhìn
+  // để tin dữ liệu còn mới.
+  function viDate(iso) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || '');
+    return m ? m[3] + '/' + m[2] + '/' + m[1] : null;
+  }
+
+  function fillCorpusStats() {
+    fetch('/api/corpus').then(function (r) { return r.json(); }).then(function (meta) {
+      if (!meta) return;  // chưa refresh lần nào: giữ nguyên dấu gạch
+      var n = meta.chunks.toLocaleString('vi-VN');
+      var set = function (id, v) { var el = document.getElementById(id); if (el) el.textContent = v; };
+      set('corpus-count', n);
+      set('stat-chunks', n);
+      set('stat-docs', meta.documents.toLocaleString('vi-VN'));
+
+      var crawled = viDate(meta.last_refreshed);
+      var newest = viDate(meta.newest_issue_date);
+      // Nói rõ HAI mốc khác nhau: ngày kiểm tra nguồn, và ngày của văn bản mới
+      // nhất đang có. Gộp làm một là nói quá độ mới của dữ liệu.
+      var label = crawled ? 'Cập nhật ' + crawled : '';
+      if (newest) label += (label ? ' · ' : '') + 'văn bản mới nhất ' + newest;
+      set('corpus-freshness', label || '—');
+    }).catch(function () { /* offline thì cứ để dấu gạch */ });
+  }
+  fillCorpusStats();
+
   window.LuatAI = { setMode: setMode, showState: showState, currentMode: currentMode };
 })();
