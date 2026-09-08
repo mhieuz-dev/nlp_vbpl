@@ -1,30 +1,40 @@
-# Phụ thuộc cho bản deploy. KHÁC requirements.txt ở đúng một điểm quan trọng:
-# lấy torch bản CPU. Đo thật ngày 07/09/2026:
+# Phụ thuộc cho bản deploy. Khác requirements.txt ở hai điểm:
 #
-#   venv phát triển (torch CUDA) : 5,9 GB
-#   venv deploy    (torch CPU)   : 1,6 GB   <- torch 750 MB, scipy 109, transformers 96
+# 1. torch bản CPU. Đo thật 07/09/2026: venv với torch CUDA 5,9 GB, với torch
+#    CPU 1,6 GB. Container Apps không có GPU, và đo trên chính app này thì GPU
+#    chỉ tiết kiệm 25 ms trên 2,3 giây (nút thắt là API Groq, chạy ở máy họ).
 #
-# HF Spaces free có 16 GB RAM / 50 GB đĩa nên 1,6 GB thoải mái. Bản CUDA thì
-# vừa thừa (Space không có GPU) vừa làm thời gian build lâu gấp mấy lần.
+# 2. GHIM CHÍNH XÁC phiên bản, không dùng >=. Lý do không phải sạch sẽ mà là
+#    đúng đắn:
+#    - `chromadb` đã đổi định dạng đĩa qua các bản 0.4/0.5/1.0. Kho trên đĩa
+#      được ghi bởi 1.5.9; một bản khác có thể không đọc được, và lỗi sẽ nổ
+#      vào một buổi sáng không ai sửa code.
+#    - 49.063 vector trong kho được tính bởi đúng bộ torch 2.13.0 +
+#      sentence-transformers 6.0.1 + transformers 5.16.1. Nạp thêm văn bản
+#      bằng bộ khác là trộn hai không gian nhúng trong cùng một chỉ mục HNSW:
+#      chất lượng tụt âm thầm, không test nào bắt được.
+#      Cách duy nhất phát hiện là evaluation/retrieval_eval.py.
 --extra-index-url https://download.pytorch.org/whl/cpu
 
-torch
-sentence-transformers>=3.0.0
-chromadb>=0.5.0
-fastapi>=0.110.0
-uvicorn>=0.29.0
-openai>=1.100.0
-python-dotenv>=1.0.0
-requests>=2.31.0
-pymupdf>=1.24.0
-huggingface-hub>=0.24.0
+torch==2.13.0+cpu
+sentence-transformers==6.0.1
+transformers==5.16.1
+tokenizers==0.23.1
+numpy==2.2.6
 
-# HF chuyển SDK docker sang gói trả phí (09/2026) nên Space chạy SDK gradio.
-# app.py tự dựng uvicorn phục vụ FastAPI sẵn có; gradio chỉ gắn thêm ở /gradio.
-gradio>=5.0
+chromadb==1.5.9
 
-# Không có ở đây, và có lý do:
-#   datasets       - chỉ dùng lúc nạp kho lần đầu từ HuggingFace, không dùng khi chạy
-#   ragas          - chỉ dùng lúc đánh giá
-#   scikit-learn   - chỉ dùng cho scripts/export_vector_map.py, chạy offline
-#   pytest         - không chạy test trên bản deploy
+fastapi==0.141.1
+uvicorn==0.52.4
+openai==1.109.1
+pydantic==2.13.5
+python-dotenv==1.2.3
+requests==2.34.2
+
+# KHÔNG có ở đây, và có lý do:
+#   pymupdf      - chỉ crawler dùng, bản phục vụ không bóc PDF bao giờ
+#   gradio       - tàn dư của đường HuggingFace Spaces đã bỏ
+#   datasets     - chỉ dùng lúc nạp kho lần đầu
+#   ragas        - chỉ dùng lúc đánh giá
+#   scikit-learn - chỉ scripts/export_vector_map.py dùng, chạy offline
+#   pytest       - không chạy test trên bản deploy

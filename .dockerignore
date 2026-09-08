@@ -1,10 +1,31 @@
-# Kho 612 MB được tải từ HuggingFace Dataset lúc khởi động, không nướng vào ảnh.
+# Bí mật. PHẢI có: Dockerfile làm `COPY . .`, thiếu dòng này là khoá LLM thật
+# nằm trong ảnh và lộ ngay khi đẩy lên registry.
+.env
+.env.example
+
+# Ghi chép nội bộ, không thuộc về bản chạy
+memory.md
+docs/
+
+# Chỉ dùng lúc phát triển, không cần để phục vụ
+tests/
+evaluation/
+.pytest_cache/
+conftest.py
+pytest.ini
+
+# Kho vector tải từ Azure Blob lúc khởi động (src/vectorstore/bootstrap.py),
+# không nướng vào ảnh: 620 MB làm mỗi lần khởi động nguội chậm thêm ~91 giây.
 data/
+
+# Sinh lại được hoặc thuộc về máy cá nhân
 .venv/
 .git/
+.github/
 __pycache__/
 *.pyc
-.pytest_cache/
-docs/
-evaluation/*.json
-web/vector_map.*
+*.log
+.gradio/
+.vscode/
+Dockerfile
+.dockerignore
