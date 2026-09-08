@@ -1,5 +1,6 @@
 import json
 import logging
+import threading
 import time
 from contextlib import asynccontextmanager
 
@@ -20,59 +21,96 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-_pipeline = None
-
 # Cho test thay được bằng monkeypatch.
 CORPUS_META_PATH = DEFAULT_PATH
 
+# Nạp model + kho mất ~2 phút trên Cloud Run (tải tarball 340 MB + dựng e5-base
+# 1,5 GB). uvicorn phải mở cổng ngay để trang tĩnh và /healthz phục vụ được,
+# nên việc dựng pipeline chạy ở một luồng nền do lifespan khởi động. Bốn biến
+# dưới là máy trạng thái của luồng đó; _lock chặn hai request đồng thời cùng
+# dựng SentenceTransformer (2 × 1,5 GB = chết OOM trong container 4 GiB).
+_pipeline = None
+_load_state = "idle"  # idle -> loading -> ready | failed
+_load_error = None
+_load_started_at = None
+_lock = threading.Lock()
+
+
+def _build_pipeline() -> RAGPipeline:
+    """Dựng pipeline thật. Chỉ gọi trong _warm_load hoặc get_pipeline, dưới _lock."""
+    ensure_corpus()
+    embedder = Embedder()
+    # article_lookup: câu hỏi nêu đích danh "Điều N" thì dense gần như không tìm
+    # được (đo thật: Điều 630 không lọt cả top-30). Bật lên, Recall@5 0.773 ->
+    # 0.864, MRR 0.551 -> 0.712.
+    store = VectorStore(embedder=embedder, article_lookup=True)
+    # Phạm vi kho lấy từ corpus_meta.json (do refresh_corpus.py ghi) chứ không
+    # quét lại 49.063 chunk lúc khởi động. Chưa có file thì scope_paragraph()
+    # im lặng, không đưa ra khẳng định nào.
+    meta = read_meta(CORPUS_META_PATH)
+    law_types = set(meta["law_types"]) if meta else None
+    generator = Generator(law_types=law_types)  # đọc LLM_* từ môi trường
+    return RAGPipeline(store=store, generator=generator)
+
+
+def _warm_load() -> None:
+    """Dựng pipeline ở luồng nền. Ghi trạng thái để get_pipeline / healthz đọc."""
+    global _pipeline, _load_state, _load_error, _load_started_at
+    with _lock:
+        if _pipeline is not None or _load_state == "loading":
+            return
+        _load_state = "loading"
+        _load_started_at = time.monotonic()
+    try:
+        pipe = _build_pipeline()
+    except Exception as exc:  # noqa: BLE001 - ghi lại mọi lỗi để healthz báo
+        logger.exception("Dựng pipeline thất bại")
+        with _lock:
+            _load_state, _load_error = "failed", str(exc)
+        return
+    with _lock:
+        _pipeline, _load_state, _load_error = pipe, "ready", None
+
 
 def get_pipeline() -> RAGPipeline:
-    """Khởi tạo pipeline một lần rồi tái sử dụng. Nạp model mất 30-60s."""
-    global _pipeline
+    """Dependency cho /api/ask*. Trả pipeline khi sẵn sàng, 503 khi chưa.
+
+    Khách vào lúc đang nạp nhận 503 CÓ CẤU TRÚC ({"status": "warming",
+    "elapsed_s": N}) để giao diện hiện "đang khởi động" và tự thử lại, thay vì
+    để EventSource treo rồi báo "mất kết nối" - một lời nói dối.
+    """
+    if _pipeline is not None:
+        return _pipeline
+    if _load_state == "failed":
+        raise HTTPException(status_code=503, detail={
+            "status": "failed",
+            "message": "Máy chủ không nạp được kho dữ liệu. Xem log để biết chi tiết.",
+        })
+    if _load_state == "loading":
+        elapsed = int(time.monotonic() - (_load_started_at or time.monotonic()))
+        raise HTTPException(status_code=503, detail={
+            "status": "warming", "elapsed_s": elapsed,
+            "message": "Máy chủ đang khởi động, thường mất khoảng 60-120 giây.",
+        })
+    # state == "idle": lifespan chưa chạy luồng nền (chạy trực tiếp, không qua
+    # uvicorn có lifespan). Dựng đồng bộ dưới lock.
+    _warm_load()
     if _pipeline is None:
-        # Đĩa của HF Space là tạm nên kho phải tải về mỗi lần khởi động.
-        # Ở máy cá nhân kho đã nằm sẵn trong data/ nên hàm này không làm gì.
-        try:
-            ensure_corpus()
-        except RuntimeError as exc:
-            # Lỗi này xảy ra ở tầng Depends, TRƯỚC thân route, nên
-            # _error_message() không chạy tới. Không đổi thành HTTPException
-            # thì người dùng chỉ thấy "Internal Server Error" trần trụi.
-            logger.error("Kho chưa sẵn sàng: %s", exc)
-            raise HTTPException(
-                status_code=503,
-                detail="Kho dữ liệu chưa sẵn sàng. Máy chủ đang khởi động hoặc "
-                       "chưa được cấu hình nguồn kho; thử lại sau ít phút.",
-            ) from exc
-        embedder = Embedder()
-        # article_lookup: câu hỏi nêu đích danh "Điều N" thì dense gần như
-        # không tìm được (đo thật: Điều 630 không lọt cả top-30). Bật lên,
-        # Recall@5 0.773 -> 0.864, MRR 0.551 -> 0.712.
-        store = VectorStore(embedder=embedder, article_lookup=True)
-        # Phạm vi kho lấy từ corpus_meta.json (do refresh_corpus.py ghi) chứ
-        # không quét lại 49.063 chunk lúc khởi động. Chưa có file thì
-        # scope_paragraph() im lặng, không đưa ra khẳng định nào.
-        meta = read_meta(CORPUS_META_PATH)
-        law_types = set(meta["law_types"]) if meta else None
-        # đọc LLM_* / GEMINI_API_KEY từ môi trường
-        generator = Generator(law_types=law_types)
-        _pipeline = RAGPipeline(store=store, generator=generator)
+        raise HTTPException(status_code=503, detail={
+            "status": "failed",
+            "message": "Máy chủ không nạp được kho dữ liệu.",
+        })
     return _pipeline
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Nạp pipeline một lần lúc khởi động thay vì trong request đầu tiên.
+    """Khởi động luồng nền dựng pipeline, rồi cho uvicorn bind ngay.
 
-    Nếu nạp thất bại (thiếu API key, chưa có Chroma...) thì ghi log và vẫn cho
-    server bind — `get_pipeline()` sẽ thử lại ở truy vấn kế tiếp. Bỏ qua khi test
-    đã override `get_pipeline` để không bao giờ nạp model thật.
+    Bỏ qua khi test đã override get_pipeline để không nạp model thật.
     """
     if get_pipeline not in app.dependency_overrides:
-        try:
-            get_pipeline()
-        except Exception:
-            logger.exception("Nạp pipeline lúc khởi động thất bại; sẽ thử lại ở truy vấn đầu tiên")
+        threading.Thread(target=_warm_load, name="warm-load", daemon=True).start()
     yield
 
 
@@ -81,6 +119,19 @@ app = FastAPI(title="luật.ai", lifespan=lifespan)
 
 class AskRequest(BaseModel):
     question: str = Field(min_length=1, max_length=1000)
+
+
+@app.get("/healthz")
+def healthz():
+    """Cloud Run startup probe trỏ vào đây. alive=true ngay khi cổng mở;
+    ready=true khi pipeline đã dựng xong."""
+    return {
+        "alive": True,
+        "ready": _pipeline is not None,
+        "state": _load_state,
+        "elapsed_s": (int(time.monotonic() - _load_started_at)
+                      if _load_started_at and _pipeline is None else None),
+    }
 
 
 def number_chunks(chunks: list[dict]) -> list[dict]:
@@ -190,6 +241,11 @@ def corpus():
 def _sse(event: str, data: dict) -> str:
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
+# Cloud Run và mọi proxy dạng nginx/Envoy sẽ đệm text/event-stream nếu thiếu hai
+# header này, và giao diện từng bước ("retrieve -> generate -> cite") sập thành
+# một cục đứng im 2,3 giây rồi hiện hết một lượt.
+SSE_HEADERS = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
+
 
 @app.get("/api/ask/stream")
 def ask_stream(q: str, pipeline=Depends(get_pipeline)):
@@ -207,7 +263,8 @@ def ask_stream(q: str, pipeline=Depends(get_pipeline)):
             logger.exception("run_query thất bại cho /api/ask/stream")
             yield _sse("error", {"error": _error_message(exc)})
 
-    return StreamingResponse(stream(), media_type="text/event-stream")
+    return StreamingResponse(stream(), media_type="text/event-stream",
+                             headers=SSE_HEADERS)
 
 
 app.mount("/", StaticFiles(directory="web", html=True), name="web")

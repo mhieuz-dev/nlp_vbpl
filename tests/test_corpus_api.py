@@ -42,7 +42,11 @@ def test_ask_explains_itself_when_corpus_is_missing(monkeypatch):
 
     monkeypatch.setattr(server, "ensure_corpus", khong_co_kho)
     monkeypatch.setattr(server, "_pipeline", None)
+    monkeypatch.setattr(server, "_load_state", "idle")
+    monkeypatch.setattr(server, "_load_error", None)
     res = TestClient(server.app, raise_server_exceptions=False).post(
         "/api/ask", json={"question": "vượt đèn đỏ phạt bao nhiêu"})
     assert res.status_code == 503
-    assert "kho" in res.json()["detail"].lower()
+    detail = res.json()["detail"]
+    assert detail["status"] == "failed"
+    assert "kho" in detail["message"].lower()

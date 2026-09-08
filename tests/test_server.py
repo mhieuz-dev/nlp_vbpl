@@ -160,3 +160,74 @@ def test_ask_passes_through_abstention_flag(client):
 def test_ask_defaults_answered_true(client):
     app.dependency_overrides[get_pipeline] = lambda: FakePipeline()
     assert client.post("/api/ask", json={"question": "q"}).json()["answered"] is True
+
+
+# --- Khởi động nguội: nạp model ở luồng nền -----------------------------------
+# Cloud Run scale-to-zero: khách vào sau lúc rảnh phải chờ ~2 phút nạp model.
+# uvicorn phải mở cổng ngay để trang tĩnh + /healthz phục vụ được, còn /api/ask
+# trả 503 "đang khởi động" có cấu trúc thay vì để trình duyệt treo rồi báo
+# "mất kết nối" - một lời nói dối.
+
+@pytest.fixture
+def warming_client(monkeypatch):
+    """Client với pipeline đang ở trạng thái 'loading', không override get_pipeline."""
+    import server
+    monkeypatch.setattr(server, "_pipeline", None)
+    monkeypatch.setattr(server, "_load_state", "loading")
+    monkeypatch.setattr(server, "_load_started_at", server.time.monotonic() - 12)
+    monkeypatch.setattr(server, "_load_error", None)
+    c = TestClient(server.app)
+    yield c
+    server.app.dependency_overrides.clear()
+
+
+def test_healthz_ok_before_pipeline_ready(warming_client):
+    r = warming_client.get("/healthz")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["alive"] is True
+    assert body["ready"] is False
+    assert body["state"] == "loading"
+
+
+def test_ask_returns_503_warming_while_loading(warming_client):
+    r = warming_client.post("/api/ask", json={"question": "câu hỏi?"})
+    assert r.status_code == 503
+    body = r.json()["detail"]
+    assert body["status"] == "warming"
+    assert body["elapsed_s"] >= 12
+
+
+def test_stream_returns_503_warming_while_loading(warming_client):
+    r = warming_client.get("/api/ask/stream", params={"q": "câu hỏi?"})
+    assert r.status_code == 503
+    assert r.json()["detail"]["status"] == "warming"
+
+
+def test_ask_returns_503_when_load_failed(monkeypatch):
+    import server
+    monkeypatch.setattr(server, "_pipeline", None)
+    monkeypatch.setattr(server, "_load_state", "failed")
+    monkeypatch.setattr(server, "_load_error", "thiếu CORPUS_URL")
+    c = TestClient(server.app)
+    r = c.post("/api/ask", json={"question": "q"})
+    assert r.status_code == 503
+    assert r.json()["detail"]["status"] == "failed"
+    server.app.dependency_overrides.clear()
+
+
+def test_healthz_ready_true_when_pipeline_loaded(monkeypatch):
+    import server
+    monkeypatch.setattr(server, "_pipeline", object())
+    monkeypatch.setattr(server, "_load_state", "ready")
+    r = TestClient(server.app).get("/healthz")
+    assert r.json() == {"alive": True, "ready": True, "state": "ready", "elapsed_s": None}
+
+
+def test_sse_has_anti_buffering_headers(client):
+    """Proxy của Cloud Run buffer text/event-stream nếu thiếu header này, và
+    giao diện từng bước sập thành một cục đứng 2,3 giây."""
+    app.dependency_overrides[get_pipeline] = lambda: FakePipeline()
+    r = client.get("/api/ask/stream", params={"q": "câu hỏi?"})
+    assert r.headers["cache-control"] == "no-cache"
+    assert r.headers["x-accel-buffering"] == "no"

@@ -74,6 +74,9 @@ REASONING_EFFORT = os.getenv("LLM_REASONING_EFFORT", "low")
 # 503 "high demand" từ Gemini rất hay gặp; chờ rồi thử lại thay vì ném cho người dùng.
 RETRY_DELAYS = (2.0, 5.0)
 
+# Giây. Groq trả lời trong ~2,2 giây (đo thật); 30 giây là trần rất rộng.
+LLM_TIMEOUT = float(os.getenv("LLM_TIMEOUT", "30"))
+
 PROMPT_TEMPLATE = """Bạn là trợ lý pháp lý chuyên về luật Việt Nam.
 Dựa vào các điều luật được đánh số sau đây, hãy trả lời câu hỏi một cách chính xác và ngắn gọn.
 Chỉ trả lời dựa trên thông tin được cung cấp. Nếu không tìm thấy thông tin, hãy nói rõ.
@@ -179,6 +182,13 @@ class Generator:
         self.client = OpenAI(
             api_key=api_key or os.getenv("LLM_API_KEY") or os.getenv("GEMINI_API_KEY"),
             base_url=base_url or os.getenv("LLM_BASE_URL", DEFAULT_BASE_URL),
+            # Mặc định của SDK là 600 giây và 2 lần thử lại. Trên Cloud Run
+            # scale-to-zero, một cuộc gọi treo giữ instance sống và bị tính tiền
+            # tới 30 phút. Đo thật: Groq trả lời trong 2,2 giây, nên 30 giây đã
+            # là rất rộng rãi. _call_with_retry đã lo phần thử lại khi 503 nên
+            # để SDK thử lại thêm chỉ nhân đôi thời gian chờ.
+            timeout=LLM_TIMEOUT,
+            max_retries=1,
         )
 
     def _create(self, messages, with_reasoning: bool):

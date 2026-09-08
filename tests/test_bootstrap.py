@@ -1,58 +1,80 @@
-"""Tải kho Chroma về lúc khởi động, cho bản deploy.
+"""Tải kho Chroma về đĩa cục bộ lúc khởi động, cho bản deploy.
 
-Đĩa của HF Space là tạm: restart là mất. Kho 612 MB nên không nhét vào git
-được, phải để ở HuggingFace Dataset rồi tải về mỗi lần container khởi động.
-Test dùng hàm tải giả nên không chạm mạng.
+Đĩa của Cloud Run instance là tạm và scale-to-zero là mất; kho 620 MB không
+nhét vào git được. Nên kho là một tarball .tar.gz trên GCS, tải qua HTTPS
+thường mỗi lần khởi động nguội. Ở máy cá nhân kho đã nằm sẵn trong data/ nên
+hàm này không làm gì.
+
+`fetch` tiêm vào nên test không chạm mạng.
 """
+import io
+import tarfile
+
 import pytest
 
 from src.vectorstore.bootstrap import ensure_corpus
 
 
-class FakeDownloader:
-    """Giả lập snapshot_download: tạo thư mục rồi trả đường dẫn."""
+def _make_tar_gz(files: dict) -> bytes:
+    """Dựng một tarball .tar.gz trong bộ nhớ, giống thứ CI đẩy lên GCS.
 
-    def __init__(self):
+    Dùng gzip chứ không phải zstd: tarfile của Python hỗ trợ sẵn, không phải
+    thêm thư viện vào bản deploy, và chênh lệch dung lượng (~370 vs ~340 MB)
+    không đáng so với thời gian tải.
+    """
+    raw = io.BytesIO()
+    with tarfile.open(fileobj=raw, mode="w:gz") as tar:
+        for name, content in files.items():
+            info = tarfile.TarInfo(name)
+            info.size = len(content)
+            tar.addfile(info, io.BytesIO(content))
+    return raw.getvalue()
+
+
+class FakeFetch:
+    """Trả bytes của tarball dựng sẵn, ghi lại URL đã gọi."""
+
+    def __init__(self, blob: bytes):
+        self.blob = blob
         self.calls = []
 
-    def __call__(self, repo_id, local_dir, **kw):
-        self.calls.append((repo_id, str(local_dir)))
-        from pathlib import Path
-        p = Path(local_dir)
-        (p / "chroma.sqlite3").parent.mkdir(parents=True, exist_ok=True)
-        (p / "chroma.sqlite3").write_bytes(b"gia lap")
-        return str(p)
+    def __call__(self, url: str) -> bytes:
+        self.calls.append(url)
+        return self.blob
 
 
-def test_downloads_when_corpus_missing(tmp_path):
-    dl = FakeDownloader()
-    got = ensure_corpus(tmp_path / "chroma_db", repo_id="ai/kho", download=dl)
-    assert (got / "chroma.sqlite3").exists()
-    assert dl.calls == [("ai/kho", str(tmp_path / "chroma_db"))]
+SAMPLE = {"chroma_db/chroma.sqlite3": b"noi dung kho",
+          "corpus_meta.json": b'{"chunks": 49063}'}
+
+
+def test_downloads_and_extracts_when_corpus_missing(tmp_path):
+    fetch = FakeFetch(_make_tar_gz(SAMPLE))
+    got = ensure_corpus(tmp_path, url="https://x/corpus.tar.gz", fetch=fetch)
+    assert (got / "chroma_db" / "chroma.sqlite3").read_bytes() == b"noi dung kho"
+    assert (got / "corpus_meta.json").exists()
+    assert fetch.calls == ["https://x/corpus.tar.gz"]
 
 
 def test_skips_download_when_corpus_already_there(tmp_path):
-    """Chạy ở máy cá nhân đã có sẵn kho 612 MB - đừng tải lại."""
-    local = tmp_path / "chroma_db"
-    local.mkdir()
-    (local / "chroma.sqlite3").write_bytes(b"kho that")
-    dl = FakeDownloader()
-    got = ensure_corpus(local, repo_id="ai/kho", download=dl)
-    assert dl.calls == [], "đã có kho thì không được gọi tải"
-    assert (got / "chroma.sqlite3").read_bytes() == b"kho that"
+    """Chạy ở máy cá nhân đã có kho - đừng tải lại."""
+    (tmp_path / "chroma_db").mkdir()
+    (tmp_path / "chroma_db" / "chroma.sqlite3").write_bytes(b"kho that o may")
+    fetch = FakeFetch(b"")
+    ensure_corpus(tmp_path, url="https://x/corpus.tar.gz", fetch=fetch)
+    assert fetch.calls == []
+    assert (tmp_path / "chroma_db" / "chroma.sqlite3").read_bytes() == b"kho that o may"
 
 
-def test_empty_directory_counts_as_missing(tmp_path):
-    """Thư mục rỗng do mount volume tạo ra không phải là kho."""
-    local = tmp_path / "chroma_db"
-    local.mkdir()
-    dl = FakeDownloader()
-    ensure_corpus(local, repo_id="ai/kho", download=dl)
-    assert len(dl.calls) == 1
+def test_empty_chroma_dir_counts_as_missing(tmp_path):
+    """Thư mục rỗng không phải là kho."""
+    (tmp_path / "chroma_db").mkdir()
+    fetch = FakeFetch(_make_tar_gz(SAMPLE))
+    ensure_corpus(tmp_path, url="https://x/corpus.tar.gz", fetch=fetch)
+    assert len(fetch.calls) == 1
 
 
-def test_no_repo_id_means_local_only(tmp_path):
-    """Chạy ở máy cá nhân không đặt biến môi trường: báo lỗi rõ ràng thay vì
-    lặng lẽ khởi động với kho rỗng rồi trả lời sai cho mọi câu hỏi."""
-    with pytest.raises(RuntimeError, match="CHROMA_REPO_ID"):
-        ensure_corpus(tmp_path / "khong-co", repo_id=None, download=FakeDownloader())
+def test_no_url_and_no_local_corpus_raises_clearly(tmp_path):
+    """Không có kho mà cũng không đặt CORPUS_URL: chết ngay với thông báo rõ,
+    thà vậy còn hơn khởi động êm với kho rỗng rồi trả lời sai mọi câu."""
+    with pytest.raises(RuntimeError, match="CORPUS_URL"):
+        ensure_corpus(tmp_path, url=None, fetch=FakeFetch(b""))

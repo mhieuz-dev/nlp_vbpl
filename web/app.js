@@ -170,6 +170,7 @@
     es.addEventListener('done', function (e) {
       es.close();
       if (current === es) current = null;
+      warmSince = null;   /* trả lời được rồi: quên đồng hồ khởi động cũ đi */
       var payload = JSON.parse(e.data);
       renderAnswer(payload);
       renderSources(payload.chunks);
@@ -183,12 +184,49 @@
       if (current !== es) return;
       es.close();
       current = null;
-      var msg = 'Mất kết nối tới máy chủ. Thử lại giúp mình.';
+
+      var msg = null;
       try { if (e.data) msg = JSON.parse(e.data).error; } catch (_) {}
-      var ae = document.getElementById('ask-err');
-      if (ae) { ae.textContent = msg + ' — bấm Tra cứu để thử lại.'; ae.hidden = false; }
-      showState('rest');
+      if (msg) { failAsk(msg); return; }
+
+      /* EventSource không cho đọc mã trạng thái, nên 503 "đang khởi động" và
+         mất kết nối thật trông giống hệt nhau ở đây. Máy chủ chạy scale-to-zero
+         nên khởi động nguội mất 60-120 giây và đó là trường hợp THƯỜNG GẶP -
+         báo "mất kết nối" lúc đó là nói dối. Hỏi /healthz để biết chắc. */
+      fetch('/healthz').then(function (r) { return r.json(); }).then(function (h) {
+        if (h && h.ready === false && h.state !== 'failed') warmThenRetry(question, h.elapsed_s);
+        else failAsk('Mất kết nối tới máy chủ. Thử lại giúp mình.');
+      }).catch(function () {
+        failAsk('Mất kết nối tới máy chủ. Thử lại giúp mình.');
+      });
     });
+  }
+
+  function failAsk(msg) {
+    var ae = document.getElementById('ask-err');
+    if (ae) { ae.textContent = msg + ' — bấm Tra cứu để thử lại.'; ae.hidden = false; }
+    showState('rest');
+  }
+
+  /* Máy chủ đang nạp model: nói thật là đang khởi động, rồi tự thử lại thay vì
+     bắt người dùng bấm đi bấm lại. Bỏ cuộc sau 3 phút để không quay vô tận. */
+  var WARM_RETRY_MS = 5000, WARM_GIVE_UP_MS = 180000;
+  var warmSince = null;
+  function warmThenRetry(question, elapsed) {
+    if (warmSince === null) warmSince = Date.now();
+    if (Date.now() - warmSince > WARM_GIVE_UP_MS) {
+      warmSince = null;
+      failAsk('Máy chủ khởi động quá lâu.');
+      return;
+    }
+    var ae = document.getElementById('ask-err');
+    if (ae) {
+      ae.textContent = 'Máy chủ đang khởi động (' + (elapsed || 0) + ' giây), '
+                     + 'thường mất 60-120 giây. Đang tự thử lại…';
+      ae.hidden = false;
+    }
+    showState('rest');
+    setTimeout(function () { ask(question); }, WARM_RETRY_MS);
   }
 
   document.getElementById('ask-form').addEventListener('submit', function (e) {
