@@ -12,6 +12,8 @@ Ví dụ chuyển sang Groq (free, không cần thẻ):
     LLM_MODEL=llama-3.3-70b-versatile
 """
 import os
+
+from src.pipeline.followup import strip_citations
 import re
 import time
 
@@ -169,6 +171,48 @@ def build_prompt(question: str, chunks: list[dict], law_types=None) -> str:
     )
 
 
+# Số lượt cũ tối đa đưa vào hội thoại. Ba cặp hỏi-đáp đủ để hiểu "còn ô tô thì
+# sao", mà vẫn giữ phần nhập đầu vào nhỏ: mỗi lượt cũ là token phải trả tiền và
+# phải nằm trong hạn mức token mỗi phút của nhà cung cấp.
+MAX_HISTORY_TURNS = 6
+# Câu trả lời cũ chỉ cần đủ để model nhớ đang nói về chuyện gì, không cần
+# nguyên văn. Cắt ngắn để một cuộc dài không phình phần nhập đầu vào vô hạn.
+MAX_HISTORY_CHARS = 600
+
+
+def build_messages(prompt: str, history=None) -> list[dict]:
+    """Ghép các lượt cũ thành hội thoại, lượt hiện tại là tin nhắn cuối.
+
+    Câu trả lời cũ bị bóc số dẫn nguồn: [3] ở lượt trước trỏ tới cách đánh số
+    nguồn của lượt trước, mà lượt này truy xuất lại nên [3] đã là điều luật
+    khác. Để nguyên thì model bê số cũ sang câu mới và trích dẫn trỏ sai điều.
+    """
+    messages = []
+    for turn in (history or [])[-MAX_HISTORY_TURNS:]:
+        role = turn.get("role")
+        content = (turn.get("content") or "").strip()
+        if role not in ("user", "assistant") or not content:
+            continue
+        if role == "assistant":
+            content = strip_citations(content).strip()
+        messages.append({"role": role, "content": content[:MAX_HISTORY_CHARS]})
+    messages.append({"role": "user", "content": prompt})
+    return messages
+
+
+CONDENSE_MAX_TOKENS = int(os.getenv("LLM_CONDENSE_MAX_TOKENS", "300"))
+
+CONDENSE_TEMPLATE = """Đoạn hội thoại hỏi đáp pháp luật:
+{doan_hoi_thoai}
+
+Câu hỏi mới nhất: {cau_hoi}
+
+Viết lại câu hỏi mới nhất thành MỘT câu hỏi đầy đủ nghĩa khi đứng một mình,
+thay các từ như "nó", "còn ... thì sao" bằng đối tượng cụ thể đang được nói
+tới. Giữ nguyên thuật ngữ pháp lý. Chỉ in ra câu hỏi, không giải thích gì thêm.
+"""
+
+
 def _is_overloaded(exc: Exception) -> bool:
     s = str(exc)
     return any(k in s for k in ("503", "UNAVAILABLE", "high demand", "overloaded"))
@@ -216,9 +260,41 @@ class Generator:
                     raise
                 time.sleep(delay)
 
-    def generate(self, question: str, chunks: list[dict]) -> dict:
+    def condense(self, question: str, history) -> str:
+        """Viết lại câu hỏi nối tiếp thành một câu hỏi tự đứng được.
+
+        Chỉ dùng cho câu CỤT, không bao giờ đụng tới câu vốn đã đủ nghĩa. Phân
+        biệt này quan trọng: dự án từng đo việc cho model viết lại câu hỏi đã
+        đầy đủ và Recall@5 tụt từ 0,864 xuống 0,545, vì model thêm chữ thừa và
+        làm loãng từ khoá pháp lý. Ở đây việc ngược lại - câu đang thiếu nghĩa,
+        thêm nghĩa vào là đúng.
+
+        Vì sao cần: "Vượt đèn đỏ xe máy phạt bao nhiêu?" rồi "còn ô tô thì
+        sao?" nếu chỉ ghép chuỗi thì cụm "xe máy" vẫn kéo kho trả về Điều 7
+        (xe máy) và Điều 6 (ô tô) không lọt nổi top 5. Viết lại thành "Ô tô
+        vượt đèn đỏ bị phạt bao nhiêu tiền?" thì Điều 6 lên hạng.
+        """
+        doan = "\n".join(
+            ("Người hỏi: " if t.get("role") == "user" else "Trả lời: ")
+            + strip_citations(t.get("content", "")).strip()[:400]
+            for t in (history or [])[-MAX_HISTORY_TURNS:]
+        )
+        prompt = CONDENSE_TEMPLATE.format(doan_hoi_thoai=doan, cau_hoi=question)
+        res = self.client.chat.completions.create(
+            model=self.model_name,
+            messages=[{"role": "user", "content": prompt}],
+            # Một câu hỏi thì ngắn. Trần thấp giữ độ trễ và tiền ở mức không
+            # đáng kể so với lượt sinh câu trả lời chính.
+            max_tokens=CONDENSE_MAX_TOKENS,
+        )
+        out = _THINK_RE.sub("", res.choices[0].message.content or "").strip()
+        # Model hay bọc câu hỏi trong ngoặc kép hoặc thêm nhãn.
+        return out.strip('"\u201c\u201d\'').split("\n")[0].strip()
+
+    def generate(self, question: str, chunks: list[dict], history=None) -> dict:
         prompt = build_prompt(question, chunks, self.law_types)
-        response = self._call_with_retry([{"role": "user", "content": prompt}])
+        messages = build_messages(prompt, history)
+        response = self._call_with_retry(messages)
 
         raw = response.choices[0].message.content or ""
         answer = _THINK_RE.sub("", raw).strip()

@@ -282,3 +282,47 @@ def test_caps_max_tokens_to_stay_under_provider_limit():
     except RuntimeError:
         pass
     assert sent["max_tokens"] == MAX_OUTPUT_TOKENS
+
+
+# ---------- hội thoại nhiều lượt ----------
+
+def test_build_messages_dat_luot_hien_tai_o_cuoi():
+    from src.generation.generator import build_messages
+    m = build_messages("PROMPT", [{"role": "user", "content": "câu cũ"}])
+    assert m[-1] == {"role": "user", "content": "PROMPT"}
+    assert m[0]["content"] == "câu cũ"
+
+
+def test_build_messages_boc_so_dan_nguon_khoi_cau_tra_loi_cu():
+    """[3] của lượt trước trỏ tới điều luật khác ở lượt này.
+
+    Để nguyên thì model thấy mẫu [3] trong hội thoại và bê lại số cũ, tạo ra
+    trích dẫn trỏ sai điều - kiểu sai tệ nhất vì nó vẫn trông rất đáng tin.
+    """
+    from src.generation.generator import build_messages
+    m = build_messages("PROMPT", [{"role": "assistant", "content": "Phạt 4 triệu [3]"}])
+    assert "[3]" not in m[0]["content"]
+
+
+def test_build_messages_cat_bot_luot_qua_cu():
+    from src.generation.generator import build_messages, MAX_HISTORY_TURNS
+    lich_su = [{"role": "user", "content": f"câu {i}"} for i in range(20)]
+    m = build_messages("PROMPT", lich_su)
+    assert len(m) == MAX_HISTORY_TURNS + 1
+    assert m[0]["content"] == "câu 14"   # giữ các lượt gần nhất
+
+
+def test_build_messages_cat_ngan_cau_tra_loi_dai():
+    from src.generation.generator import build_messages, MAX_HISTORY_CHARS
+    m = build_messages("PROMPT", [{"role": "assistant", "content": "x" * 5000}])
+    assert len(m[0]["content"]) == MAX_HISTORY_CHARS
+
+
+def test_build_messages_bo_qua_luot_rong_va_vai_tro_la():
+    from src.generation.generator import build_messages
+    m = build_messages("PROMPT", [
+        {"role": "system", "content": "bỏ qua tôi"},
+        {"role": "user", "content": "   "},
+        {"role": "user", "content": "giữ lại"},
+    ])
+    assert [x["content"] for x in m] == ["giữ lại", "PROMPT"]

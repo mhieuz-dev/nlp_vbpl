@@ -14,6 +14,7 @@ from src.embeddings.embedder import Embedder
 from src.generation.generator import Generator, fit_to_context
 from src.ingestion.corpus_meta import read_meta
 from src.vectorstore.bootstrap import ensure_corpus
+from src.pipeline.followup import retrieval_query
 from src.pipeline.rag import RAGPipeline
 from src.vectorstore.store import VectorStore
 
@@ -118,8 +119,22 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="luật.ai", lifespan=lifespan)
 
 
+class Turn(BaseModel):
+    """Một lượt cũ trong cuộc hội thoại, do trình duyệt gửi lên.
+
+    Máy chủ KHÔNG giữ trạng thái hội thoại: lịch sử nằm ở trình duyệt người
+    hỏi và đi kèm mỗi lần hỏi. Hợp với Cloud Run scale-to-zero, và không bắt
+    ai gửi câu hỏi pháp luật của họ vào một cơ sở dữ liệu để người khác giữ.
+    """
+    role: str = Field(pattern="^(user|assistant)$")
+    content: str = Field(min_length=1, max_length=4000)
+
+
 class AskRequest(BaseModel):
     question: str = Field(min_length=1, max_length=1000)
+    # Chặn trần ngay ở cửa: lịch sử do client gửi nên không tin được độ dài.
+    # Sáu lượt là ba cặp hỏi-đáp, đủ để hiểu câu nối tiếp.
+    history: list[Turn] = Field(default_factory=list, max_length=6)
 
 
 @app.get("/api/healthz")
@@ -156,14 +171,18 @@ def number_chunks(chunks: list[dict]) -> list[dict]:
     ]
 
 
-def run_query_events(pipeline, question: str):
+def run_query_events(pipeline, question: str, history=None):
     """Chạy truy vấn, sinh (event, data) theo đúng thời điểm xảy ra.
 
     Ba bước đo được thật: retrieve (embed + tìm kiếm), generate, cite.
     Sự kiện cuối luôn là ("done", payload) — payload giống hệt POST /api/ask.
     """
     t0 = time.perf_counter()
-    chunks = pipeline.store.query(question, top_k=pipeline.top_k)
+    # Câu đem đi TÌM khác câu gửi cho model ĐỌC: câu nối tiếp kiểu "còn ô tô
+    # thì sao" tự nó không đủ nghĩa để nhúng, phải ghép câu hỏi trước vào.
+    truy_van = retrieval_query(question, history,
+                               condense=getattr(pipeline.generator, "condense", None))
+    chunks = pipeline.store.query(truy_van, top_k=pipeline.top_k)
     # Cắt cho vừa trần ngữ cảnh TRƯỚC khi đánh số, để số nguồn model thấy khớp
     # với số nguồn hiển thị trên giao diện.
     chunks = fit_to_context(chunks)
@@ -174,7 +193,7 @@ def run_query_events(pipeline, question: str):
     numbered = number_chunks(chunks)
     yield "chunks", {"chunks": numbered}
 
-    result = pipeline.generator.generate(question, chunks)
+    result = pipeline.generator.generate(question, chunks, history=history)
     t2 = time.perf_counter()
     generate_ms = int((t2 - t1) * 1000)
     yield "step", {"step": "generate", "ms": generate_ms}
@@ -193,9 +212,9 @@ def run_query_events(pipeline, question: str):
     }
 
 
-def run_query(pipeline, question: str) -> dict:
+def run_query(pipeline, question: str, history=None) -> dict:
     """Bọc không-stream cho POST /api/ask."""
-    for event, data in run_query_events(pipeline, question):
+    for event, data in run_query_events(pipeline, question, history):
         if event == "done":
             return data
 
@@ -225,7 +244,7 @@ def ask(req: AskRequest, pipeline=Depends(get_pipeline)):
     if not question:
         raise HTTPException(status_code=400, detail="Câu hỏi không được để trống.")
     try:
-        return run_query(pipeline, question)
+        return run_query(pipeline, question, _as_turns(req.history))
     except Exception as exc:
         logger.exception("run_query thất bại cho /api/ask")
         return JSONResponse(
@@ -253,17 +272,24 @@ def _sse(event: str, data: dict) -> str:
 SSE_HEADERS = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
 
 
-@app.get("/api/ask/stream")
-def ask_stream(q: str, pipeline=Depends(get_pipeline)):
-    question = q.strip()
+def _as_turns(history) -> list[dict]:
+    """Đổi các Turn đã kiểm của pydantic thành dict thuần cho lớp dưới."""
+    return [{"role": h.role, "content": h.content} for h in (history or [])]
+
+
+# POST chứ không GET: lịch sử hội thoại không nhét vừa query string, và một
+# URL vài KB sẽ bị proxy cắt ngang một cách âm thầm. Đổi lại frontend phải đọc
+# stream bằng fetch thay cho EventSource, vì EventSource chỉ biết GET.
+@app.post("/api/ask/stream")
+def ask_stream(req: AskRequest, pipeline=Depends(get_pipeline)):
+    question = req.question.strip()
     if not question:
         raise HTTPException(status_code=400, detail="Câu hỏi không được để trống.")
-    if len(question) > 1000:
-        raise HTTPException(status_code=400, detail="Câu hỏi quá dài (tối đa 1000 ký tự).")
+    history = _as_turns(req.history)
 
     def stream():
         try:
-            for event, data in run_query_events(pipeline, question):
+            for event, data in run_query_events(pipeline, question, history):
                 yield _sse(event, data)
         except Exception as exc:
             logger.exception("run_query thất bại cho /api/ask/stream")
