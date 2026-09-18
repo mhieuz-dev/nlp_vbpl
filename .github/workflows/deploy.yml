@@ -1,0 +1,90 @@
+# Deploy mã nguồn lên Cloud Run khi đẩy lên master.
+#
+# Tách riêng khỏi workflow cập nhật kho luật, vì hai việc này độc lập: kho nằm
+# trên GCS nên đổi dữ liệu không cần build lại ảnh, và đổi mã nguồn không cần
+# đụng tới kho.
+
+name: Deploy lên Cloud Run
+
+on:
+  push:
+    branches: [master]
+    # Sửa mỗi tài liệu thì không cần build lại ảnh 985 MB.
+    paths-ignore:
+      - "**.md"
+      - ".gitignore"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write # cho Workload Identity Federation
+
+concurrency:
+  group: deploy-cloud-run
+  cancel-in-progress: true
+
+env:
+  REGION: us-central1
+  SERVICE: luatai
+  IMAGE: us-central1-docker.pkg.dev/luatai/luatai/app
+  WIF_PROVIDER: projects/109110304318/locations/global/workloadIdentityPools/github/providers/github-provider
+  WIF_SA: github-ci@luatai.iam.gserviceaccount.com
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Chạy test trước khi deploy. Nếu đỏ thì không đẩy gì lên cả.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+      - name: Cài phụ thuộc và chạy test
+        run: |
+          pip install -r requirements.txt
+          pytest -q
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.WIF_SA }}
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Build và đẩy ảnh
+        run: |
+          set -eu
+          gcloud auth configure-docker ${REGION}-docker.pkg.dev --quiet
+          TAG="${GITHUB_SHA::7}"
+          docker build -t "${IMAGE}:${TAG}" -t "${IMAGE}:latest" .
+          docker push "${IMAGE}:${TAG}"
+          docker push "${IMAGE}:latest"
+          echo "TAG=${TAG}" >> "$GITHUB_ENV"
+
+      - name: Deploy
+        run: |
+          # --no-cpu-throttling là bắt buộc, không phải tối ưu: luồng nền nạp
+          # model chạy ngoài request, mà Cloud Run mặc định chỉ cấp CPU khi đang
+          # xử lý request. Thiếu cờ này thì cold start là 931 giây thay vì 82.
+          gcloud run deploy "$SERVICE" \
+            --image="${IMAGE}:${TAG}" \
+            --region="$REGION" \
+            --no-cpu-throttling \
+            --startup-probe=httpGet.path=/api/healthz,initialDelaySeconds=5,periodSeconds=10,failureThreshold=30,timeoutSeconds=5
+
+      - name: Kiểm tra bản vừa deploy còn sống
+        run: |
+          set -eu
+          URL=$(gcloud run services describe "$SERVICE" --region="$REGION" --format='value(status.url)')
+          echo "URL: $URL"
+          # Cold start ~82 giây, cho rộng tay tới 5 phút.
+          for i in $(seq 1 30); do
+            if curl -sf -m 30 "$URL/api/healthz" | grep -q '"ready":true'; then
+              echo "OK: bản mới đã sẵn sàng sau ~$((i*10))s"; exit 0
+            fi
+            sleep 10
+          done
+          echo "LỖI: quá 5 phút mà /api/healthz vẫn chưa ready"; exit 1
