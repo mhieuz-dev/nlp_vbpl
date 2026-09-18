@@ -3,84 +3,107 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>luật.ai — Tra cứu văn bản pháp luật Việt Nam</title>
+<title>luật.ai — Tra cứu văn bản quy phạm pháp luật Việt Nam</title>
+<meta name="description" content="Hỏi một câu, nhận điều luật gốc. Mỗi câu trả lời dẫn về đúng điều khoản trong văn bản quy phạm pháp luật đã số hoá.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@300;400;500;600;700;800;900&family=Spectral:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500;700&display=swap">
 <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-<div class="app">
-  <canvas class="field" id="field"></canvas>
-  <div class="veil"></div>
-  <div class="inner">
-    <div class="nav">
-      <span class="brand"><i></i>luật.ai</span>
-      <span class="right">
-        <span class="tag">multilingual-e5-base</span>
-        <span class="tag"><b id="corpus-count">—</b> điều đã index</span>
-        <span class="tag" id="corpus-freshness" title="Ngày crawl gần nhất và văn bản mới nhất trong kho">—</span>
-        <span class="mode" role="group" aria-label="Chế độ màu">
-          <button type="button" data-set="light" aria-pressed="false">Sáng</button>
-          <button type="button" data-set="dark" aria-pressed="true">Tối</button>
-        </span>
-      </span>
+<header class="topbar">
+  <a class="brand" href="/">
+    <span class="mark" aria-hidden="true"></span>
+    <span class="wordmark">luật<b>.ai</b></span>
+  </a>
+  <div class="meta">
+    <span class="tag" title="Mô hình nhúng dùng để tìm điều luật">multilingual-e5-base</span>
+    <span class="tag"><b id="corpus-count">—</b> điều đã index</span>
+    <span class="tag" id="corpus-freshness" title="Ngày cập nhật kho và ngày ban hành văn bản mới nhất">—</span>
+    <span class="mode" role="group" aria-label="Chế độ màu">
+      <button type="button" data-set="light" aria-pressed="false">Sáng</button>
+      <button type="button" data-set="dark" aria-pressed="true">Tối</button>
+    </span>
+  </div>
+</header>
+
+<main>
+<div class="band">
+  <canvas class="field" id="field" aria-hidden="true"></canvas>
+  <div class="stage">
+  <section id="state-rest" class="hero">
+    <p class="eyebrow">Tra cứu văn bản quy phạm pháp luật</p>
+    <h1>Hỏi một câu.<br><em>Nhận điều luật thật.</em></h1>
+    <p class="sub">Mỗi câu trả lời dẫn về đúng điều khoản gốc. Không có trong kho
+      thì hệ thống nói thẳng là không có, chứ không đoán.</p>
+
+  </section>
+
+  <!-- Ô tra cứu nằm NGOÀI #state-rest một cách có chủ ý. app.js ẩn #state-rest
+       khi hiện câu trả lời, nên để ô tra cứu bên trong thì hỏi xong là mất
+       đường hỏi tiếp. Ở ngoài thì nó theo suốt cả ba trạng thái. -->
+  <form class="searchbar" id="ask-form" role="search">
+    <input id="q-input" type="text" autocomplete="off"
+           aria-label="Câu hỏi pháp luật"
+           placeholder="Vượt đèn đỏ bị phạt bao nhiêu tiền?" maxlength="1000">
+    <button type="submit" id="ask-btn">Tra cứu</button>
+  </form>
+  <p class="err" id="ask-err" role="alert" hidden></p>
+
+  <div class="restextra">
+    <div class="qchips" id="qchips">
+      <button class="qchip" type="button">Tuổi kết hôn tối thiểu?</button>
+      <button class="qchip" type="button">Thời hiệu khởi kiện dân sự</button>
+      <button class="qchip" type="button">Di chúc hợp lệ cần gì?</button>
+      <button class="qchip" type="button">Nồng độ cồn phạt bao nhiêu?</button>
+      <button class="qchip" type="button">Bồi thường ngoài hợp đồng</button>
     </div>
 
-    <section id="state-rest" class="rest">
-      <h2>Hỏi một câu. Nhận <em>điều luật thật</em>.</h2>
-      <p class="sub">Không đoán, không bịa. Mỗi câu trả lời đều dẫn về điều khoản gốc
-        trong văn bản quy phạm pháp luật đã số hoá.</p>
-      <form class="searchbar" id="ask-form">
-        <input id="q-input" type="text" autocomplete="off"
-               aria-label="Câu hỏi pháp luật"
-               placeholder="Hợp đồng vô hiệu khi nào?" maxlength="1000">
-        <button type="submit" id="ask-btn">Tra cứu</button>
-      </form>
-      <p class="err" id="ask-err" role="alert" hidden></p>
-      <div class="qchips" id="qchips">
-        <button class="qchip" type="button">Tuổi kết hôn tối thiểu?</button>
-        <button class="qchip" type="button">Thời hiệu khởi kiện dân sự</button>
-        <button class="qchip" type="button">Di chúc hợp lệ cần gì?</button>
-        <button class="qchip" type="button">Phân loại tội phạm</button>
-        <button class="qchip" type="button">Bồi thường ngoài hợp đồng</button>
-      </div>
-      <div class="statrow">
-        <div><b id="stat-chunks">—</b><span>điều luật</span></div>
-        <div><b id="stat-docs">—</b><span>văn bản</span></div>
-        <div><b>0,88</b><span>độ khớp TB</span></div>
-        <div><b>Top-10</b><span>nguồn mỗi câu</span></div>
-      </div>
-    </section>
+    <dl class="statrow">
+      <div><dt>Điều luật</dt><dd id="stat-chunks">—</dd></div>
+      <div><dt>Văn bản</dt><dd id="stat-docs">—</dd></div>
+      <div><dt>Nguồn mỗi câu</dt><dd>Top-10</dd></div>
+      <div><dt>Độ khớp TB</dt><dd>0,88</dd></div>
+    </dl>
+  </div>
 
-    <section id="state-think" class="think" hidden>
-      <div class="qecho" id="think-q"></div>
-      <div class="steps" id="steps"></div>
-      <div class="skel">
-        <div class="ln" style="width:96%"></div>
-        <div class="ln" style="width:88%"></div>
-        <div class="ln" style="width:71%"></div>
-        <div class="ln" style="width:46%"></div>
-      </div>
-    </section>
-
-    <section id="state-answer" hidden>
-      <div class="ansgrid">
-        <div class="card">
-          <p class="lbl">Tổng hợp <b>mô hình ngôn ngữ</b></p>
-          <div id="answer-body"></div>
-          <div class="metrics" id="metrics"></div>
-          <p class="disc"><b>▲</b> Tham khảo học thuật — không thay thế ý kiến
-            của người hành nghề luật.</p>
-        </div>
-        <div class="card">
-          <p class="lbl">Nguồn <b id="src-count">top 5</b></p>
-          <div id="src-list"></div>
-        </div>
-      </div>
-    </section>
+  <section id="state-think" class="think" hidden>
+    <div class="qecho" id="think-q"></div>
+    <div class="steps" id="steps"></div>
+    <div class="skel" aria-hidden="true">
+      <div class="ln" style="width:96%"></div>
+      <div class="ln" style="width:88%"></div>
+      <div class="ln" style="width:71%"></div>
+      <div class="ln" style="width:46%"></div>
+    </div>
+  </section>
   </div>
 </div>
+
+<div class="stage stage-answer">
+  <section id="state-answer" hidden>
+    <div class="ansgrid">
+      <article class="card card-answer">
+        <p class="lbl">Tổng hợp bởi <b>mô hình ngôn ngữ</b></p>
+        <div id="answer-body"></div>
+        <div class="metrics" id="metrics"></div>
+      </article>
+      <aside class="card card-src">
+        <p class="lbl">Điều luật đã truy xuất <b id="src-count">top 5</b></p>
+        <div id="src-list"></div>
+      </aside>
+    </div>
+  </section>
+</div>
+</main>
+
+<footer class="foot">
+  <p><b>Đồ án môn Xử lý ngôn ngữ tự nhiên.</b> Đây không phải cổng thông tin của
+    cơ quan nhà nước. Nội dung do mô hình ngôn ngữ tổng hợp từ kho văn bản đã số
+    hoá, dùng để tham khảo và học tập, không thay thế ý kiến của người hành nghề
+    luật. Luôn đối chiếu với bản gốc trước khi sử dụng.</p>
+</footer>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
 <script src="/app.js"></script>
 <script src="/field.js"></script>

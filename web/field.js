@@ -58,6 +58,10 @@
     paintOnce();
   }
   window.addEventListener('resize', resize);
+  // Băng xanh xẹp lại khi chuyển sang trạng thái trả lời rồi nở ra khi hỏi câu
+  // mới, mà đổi trạng thái thì không phát sự kiện `resize` của window. Thiếu
+  // quan sát này thì canvas giữ nguyên kích thước cũ và vẽ lệch.
+  if (window.ResizeObserver) new ResizeObserver(resize).observe(canvas);
 
   function recomputeHot() {
     if (!hot.length || !W || !H) return;
