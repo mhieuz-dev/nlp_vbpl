@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 
 from src.embeddings.embedder import Embedder
 from src.generation.generator import Generator, fit_to_context
-from src.ingestion.corpus_meta import DEFAULT_PATH, read_meta
+from src.ingestion.corpus_meta import read_meta
 from src.vectorstore.bootstrap import ensure_corpus
 from src.pipeline.rag import RAGPipeline
 from src.vectorstore.store import VectorStore
@@ -21,8 +21,9 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-# Cho test thay được bằng monkeypatch.
-CORPUS_META_PATH = DEFAULT_PATH
+# None = để read_meta tự chọn (data/corpus_meta.json trước, rồi gốc repo).
+# Test thay bằng monkeypatch khi cần một đường cụ thể.
+CORPUS_META_PATH = None
 
 # Nạp model + kho mất ~2 phút trên Cloud Run (tải tarball 340 MB + dựng e5-base
 # 1,5 GB). uvicorn phải mở cổng ngay để trang tĩnh và /healthz phục vụ được,

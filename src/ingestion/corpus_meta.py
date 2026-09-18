@@ -1,13 +1,21 @@
 """Thống kê kho, để giao diện nói được "dữ liệu cập nhật đến ngày nào".
 
-Đặt ở GỐC REPO chứ không phải trong `data/`: `.gitignore` có `data/` nên file
-nằm trong đó sẽ không lên git, mà bản deploy cần đọc được nó.
+Hai chỗ file này có thể nằm:
+- `data/corpus_meta.json` - đi kèm kho, đóng vào cùng tarball. Đây là nguồn thật
+  cho bản deploy và cho lượt cập nhật hằng đêm, vì nó luôn khớp với kho hiện tại.
+- `<gốc repo>/corpus_meta.json` - bản committed, làm mồi cho lần chạy đầu và cho
+  máy cá nhân. Có thể tụt hậu so với kho deploy nên chỉ dùng khi không có bản kia.
+
+`read_meta` ưu tiên bản trong `data/`. Nếu không thì nhãn "cập nhật đến ngày..."
+sẽ đứng yên ở ngày commit dù kho deploy đã đổi - đúng thứ file này sinh ra để tránh.
 """
 import json
 from datetime import date
 from pathlib import Path
 
-DEFAULT_PATH = Path(__file__).resolve().parents[2] / "corpus_meta.json"
+DATA_PATH = Path("data/corpus_meta.json")
+REPO_PATH = Path(__file__).resolve().parents[2] / "corpus_meta.json"
+DEFAULT_PATH = REPO_PATH  # giữ tên cũ cho chỗ khác đang import
 PAGE_SIZE = 5000
 
 
@@ -35,16 +43,30 @@ def build_corpus_meta(collection, page_size: int = PAGE_SIZE) -> dict:
     }
 
 
-def write_meta(meta: dict, path=DEFAULT_PATH) -> Path:
-    path = Path(path)
+def write_meta(meta: dict, path=None) -> Path:
+    """Ghi metadata. Không truyền path thì ghi vào `data/` nếu thư mục đó tồn tại
+    (lượt cập nhật hằng đêm cần nó ở đây để đóng vào tarball), còn không thì ghi
+    ra gốc repo (máy cá nhân, để commit làm mồi)."""
+    if path is not None:
+        target = Path(path)
+    elif DATA_PATH.parent.is_dir():
+        target = DATA_PATH
+    else:
+        target = REPO_PATH
     meta = {**meta, "last_refreshed": date.today().isoformat()}
-    path.write_text(json.dumps(meta, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    return path
+    target.write_text(json.dumps(meta, ensure_ascii=False, indent=2) + "\n",
+                      encoding="utf-8")
+    return target
 
 
-def read_meta(path=DEFAULT_PATH):
-    """None khi chưa chạy refresh lần nào - để API trả 200 chứ không 500."""
-    path = Path(path)
-    if not path.exists():
-        return None
-    return json.loads(path.read_text(encoding="utf-8"))
+def read_meta(path=None):
+    """None khi chưa có metadata ở đâu cả - để API trả 200 chứ không 500.
+
+    Không truyền path thì thử `data/corpus_meta.json` (khớp kho deploy) trước,
+    rồi mới tới bản committed ở gốc repo.
+    """
+    candidates = [Path(path)] if path is not None else [DATA_PATH, REPO_PATH]
+    for p in candidates:
+        if p.exists():
+            return json.loads(p.read_text(encoding="utf-8"))
+    return None

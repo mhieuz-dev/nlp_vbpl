@@ -68,3 +68,33 @@ def test_write_then_read_round_trip(tmp_path):
 def test_read_missing_file_returns_none(tmp_path):
     """Chưa chạy refresh lần nào thì API phải trả 200 với null, không 500."""
     assert read_meta(tmp_path / "chua-co.json") is None
+
+
+def test_read_meta_prefers_data_path_over_repo(tmp_path, monkeypatch):
+    """Kho deploy đổi hằng đêm; bản committed ở gốc repo tụt hậu. read_meta phải
+    lấy data/corpus_meta.json trước."""
+    from src.ingestion import corpus_meta as cm
+    data = tmp_path / "data" / "corpus_meta.json"
+    data.parent.mkdir()
+    data.write_text('{"chunks": 99999, "law_types": {}}', encoding="utf-8")
+    repo = tmp_path / "corpus_meta.json"
+    repo.write_text('{"chunks": 1, "law_types": {}}', encoding="utf-8")
+    monkeypatch.setattr(cm, "DATA_PATH", data)
+    monkeypatch.setattr(cm, "REPO_PATH", repo)
+    assert cm.read_meta()["chunks"] == 99999
+
+
+def test_read_meta_falls_back_to_repo_when_no_data(tmp_path, monkeypatch):
+    from src.ingestion import corpus_meta as cm
+    repo = tmp_path / "corpus_meta.json"
+    repo.write_text('{"chunks": 42, "law_types": {}}', encoding="utf-8")
+    monkeypatch.setattr(cm, "DATA_PATH", tmp_path / "data" / "corpus_meta.json")
+    monkeypatch.setattr(cm, "REPO_PATH", repo)
+    assert cm.read_meta()["chunks"] == 42
+
+
+def test_read_meta_none_when_nothing_exists(tmp_path, monkeypatch):
+    from src.ingestion import corpus_meta as cm
+    monkeypatch.setattr(cm, "DATA_PATH", tmp_path / "a.json")
+    monkeypatch.setattr(cm, "REPO_PATH", tmp_path / "b.json")
+    assert cm.read_meta() is None
