@@ -349,15 +349,18 @@ def test_goi_lai_khong_suy_luan_khi_model_tra_ve_rong():
     g.model_name = "fake"
     goi = []
 
-    def fake_create(messages, with_reasoning):
-        goi.append(with_reasoning)
+    def fake_create(messages, with_reasoning, max_tokens=None):
+        goi.append((with_reasoning, max_tokens))
         return FakeRes("" if with_reasoning else "Phạt 4 triệu [1].")
 
     g._create = fake_create
     g._call_with_retry = lambda m: fake_create(m, with_reasoning=True)
 
     out = g.generate("câu hỏi?", [{"title": "Luật X", "text": "Điều 1."}])
-    assert goi == [True, False]          # có gọi lại, đúng một lần
+    from src.generation.generator import FALLBACK_MAX_TOKENS
+    # Lượt gọi lại dùng trần THẤP HƠN: giữ nguyên 800 là tự bắn thêm một yêu
+    # cầu 800 token vào cùng một phút và làm vỡ hạn mức OTPM của Groq.
+    assert goi == [(True, None), (False, FALLBACK_MAX_TOKENS)]
     assert out["answer"] == "Phạt 4 triệu [1]."
     assert out["citations"] == [1]
 
@@ -375,8 +378,26 @@ def test_van_bao_khong_tao_duoc_khi_ca_hai_lan_deu_rong():
     g = Generator.__new__(Generator)
     g.law_types = None
     g.model_name = "fake"
-    g._create = lambda messages, with_reasoning: FakeRes()
+    g._create = lambda messages, with_reasoning, max_tokens=None: FakeRes()
     g._call_with_retry = lambda m: FakeRes()
 
     out = g.generate("câu hỏi?", [{"title": "Luật X", "text": "Điều 1."}])
     assert out["answer"] == "Hệ thống không tạo được câu trả lời cho câu hỏi này."
+
+
+def test_temperature_bang_khong():
+    """Tra cứu luật phải lặp lại được: cùng câu hỏi, cùng câu trả lời.
+
+    Mặc định của API là 1. Đo trên bản chạy thật với mặc định đó: ba lượt hỏi
+    "còn ô tô thì sao?" ra ba kết quả khác nhau, một trong đó nêu sai mức phạt.
+    """
+    from src.generation.generator import TEMPERATURE
+    assert TEMPERATURE == 0
+
+
+def test_chi_chan_lich_su_khi_that_su_co_lich_su():
+    """Câu hỏi lượt đầu không cần đoạn cảnh báo này, thêm vào chỉ tốn token."""
+    from src.generation.generator import build_prompt, HISTORY_GUARD
+    chunks = [{"title": "Luật X", "text": "Điều 1."}]
+    assert HISTORY_GUARD not in build_prompt("q", chunks)
+    assert HISTORY_GUARD in build_prompt("q", chunks, has_history=True)

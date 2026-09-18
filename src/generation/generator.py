@@ -82,6 +82,15 @@ REASONING_EFFORT = os.getenv("LLM_REASONING_EFFORT", "low")
 # đầu tiên ("Limit 1000, Requested 1473 ... reduce max_tokens"). Đo trên bản
 # deploy thật. Câu trả lời pháp lý thường 200-500 token nên 800 không cắt cụt gì.
 MAX_OUTPUT_TOKENS = int(os.getenv("LLM_MAX_OUTPUT_TOKENS", "800"))
+# Mặc định của API là 1. Với tra cứu pháp luật thì đó là sai nguyên tắc: cùng
+# một câu hỏi phải ra cùng một câu trả lời, người dùng không thể hỏi lại ba lần
+# rồi tự chọn mức phạt nào nghe hợp lý. Đo được hậu quả trên bản chạy thật: ba
+# lượt hỏi "còn ô tô thì sao?" ra ba kết quả khác nhau, một trong đó sai số.
+TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0"))
+# Lượt gọi lại không cần phần suy luận nên cần ít chỗ hơn hẳn. Giữ nguyên 800
+# là tự bắn thêm một yêu cầu 800 token vào cùng một phút, đúng thứ làm hạn mức
+# OTPM của Groq (1000) vỡ - đã thấy 429 vì chính lượt gọi lại này.
+FALLBACK_MAX_TOKENS = int(os.getenv("LLM_FALLBACK_MAX_TOKENS", "400"))
 
 # 503 "high demand" từ Gemini rất hay gặp; chờ rồi thử lại thay vì ném cho người dùng.
 RETRY_DELAYS = (2.0, 5.0)
@@ -164,14 +173,25 @@ def scope_paragraph(law_types) -> str:
     return "\n".join(lines)
 
 
-def build_prompt(question: str, chunks: list[dict], law_types=None) -> str:
+HISTORY_GUARD = """
+LƯU Ý VỀ CÁC LƯỢT HỎI TRƯỚC: những lượt trao đổi phía trên chỉ dùng để hiểu câu
+hỏi hiện tại đang nói về đối tượng nào. Chúng KHÔNG phải là nguồn. Mọi con số,
+mức phạt, số điều và số khoản trong câu trả lời phải lấy từ các điều luật được
+đánh số ở dưới. Tuyệt đối không bê lại con số của lượt trước: lượt trước hỏi về
+đối tượng khác nên con số của nó thường sai với câu hỏi lần này.
+"""
+
+
+def build_prompt(question: str, chunks: list[dict], law_types=None,
+                 has_history: bool = False) -> str:
     context = "\n\n".join(
         f"[{i}] {c['title']}\n{c['text']}" for i, c in enumerate(chunks, start=1)
     )
-    return PROMPT_TEMPLATE.format(
+    prompt = PROMPT_TEMPLATE.format(
         context=context, question=question, n=len(chunks),
         marker=NO_ANSWER_MARKER, scope=scope_paragraph(law_types),
     )
+    return prompt + HISTORY_GUARD if has_history else prompt
 
 
 # Số lượt cũ tối đa đưa vào hội thoại. Ba cặp hỏi-đáp đủ để hiểu "còn ô tô thì
@@ -251,9 +271,10 @@ class Generator:
             max_retries=1,
         )
 
-    def _create(self, messages, with_reasoning: bool):
+    def _create(self, messages, with_reasoning: bool, max_tokens: int = None):
         kwargs = {"model": self.model_name, "messages": messages,
-                  "max_tokens": MAX_OUTPUT_TOKENS}
+                  "max_tokens": max_tokens or MAX_OUTPUT_TOKENS,
+                  "temperature": TEMPERATURE}
         if with_reasoning and REASONING_EFFORT:
             kwargs["reasoning_effort"] = REASONING_EFFORT
         return self.client.chat.completions.create(**kwargs)
@@ -292,6 +313,7 @@ class Generator:
         res = self.client.chat.completions.create(
             model=self.model_name,
             messages=[{"role": "user", "content": prompt}],
+            temperature=TEMPERATURE,
             # Một câu hỏi thì ngắn. Trần thấp giữ độ trễ và tiền ở mức không
             # đáng kể so với lượt sinh câu trả lời chính.
             max_tokens=CONDENSE_MAX_TOKENS,
@@ -301,7 +323,8 @@ class Generator:
         return out.strip('"\u201c\u201d\'').split("\n")[0].strip()
 
     def generate(self, question: str, chunks: list[dict], history=None) -> dict:
-        prompt = build_prompt(question, chunks, self.law_types)
+        prompt = build_prompt(question, chunks, self.law_types,
+                              has_history=bool(history))
         messages = build_messages(prompt, history)
         response = self._call_with_retry(messages)
         answer = _answer_text(response)
@@ -316,8 +339,12 @@ class Generator:
             # câu trả lời. Không nâng MAX_OUTPUT_TOKENS vì hạn mức token mỗi
             # phút của Groq đã từng chặn ở đúng chỗ này (Limit 1000).
             try:
-                answer = _answer_text(self._create(messages, with_reasoning=False))
+                answer = _answer_text(self._create(
+                    messages, with_reasoning=False, max_tokens=FALLBACK_MAX_TOKENS))
             except Exception:
+                # Thường là 429: hạn mức token mỗi phút của Groq. Không thử
+                # thêm nữa - thử tiếp chỉ đẩy hạn mức xuống sâu hơn cho những
+                # câu hỏi kế tiếp.
                 logger.exception("gọi lại không-suy-luận cũng hỏng")
 
         if not answer:
