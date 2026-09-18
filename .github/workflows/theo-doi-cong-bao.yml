@@ -1,17 +1,16 @@
-# Dò văn bản quy phạm pháp luật mới trên Công báo điện tử, mỗi ngày một lần.
+# Cập nhật kho luật từ Công báo điện tử, mỗi ngày một lần.
 #
-# Vì sao chỉ DÒ mà chưa nạp thẳng vào kho: bước nhúng cần torch + e5-base và
-# cần chính file ChromaDB 612 MB, mà file đó hiện chỉ nằm trên máy cá nhân.
-# Khi nào kho được đưa lên HuggingFace Dataset (bước deploy) thì mới nối được
-# nốt vòng. Xem phần "Bật chế độ nạp thẳng" ở cuối file.
+# MỘT job, CRAWL ĐÚNG MỘT LẦN. Đây không phải lựa chọn thẩm mỹ: crawler ghi
+# status:"ok" vào state ngay sau khi tải xong (congbao.py:320-322) và bỏ qua mọi
+# văn bản đã "ok" (congbao.py:311). Nên thiết kế "job nhẹ dò trước, job nặng nạp
+# sau" sẽ KHÔNG BAO GIỜ nạp được gì - job hai luôn thấy 0 văn bản mới và báo
+# xanh vĩnh viễn. Vì vậy: crawl một lần, ghi ra --save-dir, rồi --ingest-dir đọc
+# lại từ đó.
 #
-# Ở dạng hiện tại workflow này vẫn đáng giá:
-#   1. báo có văn bản mới hay không, mỗi sáng;
-#   2. giữ ấm cache bytes thô nên lượt nạp sau không phải tải lại của họ;
-#   3. làm CHIM BÁO BÃO - congbao đổi HTML/RSS là đỏ ngay hôm sau, chứ không
-#      phải ba tháng sau mới phát hiện.
+# Cập nhật xong KHÔNG cần deploy: kho nằm trên GCS, Cloud Run chạy scale-to-zero
+# nên lần khởi động nguội kế tiếp tự lấy bản mới.
 
-name: Theo dõi Công báo
+name: Cập nhật kho luật
 
 on:
   schedule:
@@ -29,16 +28,22 @@ on:
 
 permissions:
   contents: read
+  id-token: write # cần cho Workload Identity Federation
 
 concurrency:
   # Lượt sau huỷ lượt trước: hai lượt cùng crawl một nguồn vừa vô ích vừa bất lịch sự.
-  group: theo-doi-cong-bao
+  group: cap-nhat-kho-luat
   cancel-in-progress: true
 
+env:
+  BUCKET: luatai-corpus-luatai
+  WIF_PROVIDER: projects/109110304318/locations/global/workloadIdentityPools/github/providers/github-provider
+  WIF_SA: github-ci@luatai.iam.gserviceaccount.com
+
 jobs:
-  do-van-ban-moi:
+  cap-nhat:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 45
 
     steps:
       - uses: actions/checkout@v4
@@ -47,9 +52,9 @@ jobs:
         with:
           python-version: "3.10"
 
-      # Đúng hai gói. Đường dò không chạm tới Embedder/VectorStore (chúng được
-      # import muộn trong refresh_corpus.py) nên không cần torch, không cần
-      # chromadb - lượt chạy vì thế tính bằng giây chứ không phải chục phút.
+      # Bước dò chỉ cần hai gói. Embedder/VectorStore được import muộn trong
+      # refresh_corpus.py nên đường này không chạm torch - những ngày không có
+      # gì mới, cả lượt chạy tính bằng giây.
       - name: Cài phụ thuộc cho việc dò
         run: pip install "requests>=2.31" "pymupdf>=1.24"
 
@@ -59,9 +64,9 @@ jobs:
           path: |
             data/congbao_state.json
             data/cache/congbao
-          # Key đổi mỗi lượt để cache luôn được ghi mới; restore-keys kéo về
-          # bản gần nhất. Không có phần này thì mỗi sáng lại báo trùng 50 văn
-          # bản cũ và tải lại PDF của họ một cách vô ích.
+          # Key đổi mỗi lượt để cache luôn được ghi mới; restore-keys kéo về bản
+          # gần nhất. Không có phần này thì mỗi sáng lại báo trùng 50 văn bản cũ
+          # và tải lại PDF của họ một cách vô ích.
           key: congbao-${{ github.run_id }}
           restore-keys: congbao-
 
@@ -77,6 +82,51 @@ jobs:
             --dry-run 2>&1 | tee ket-qua.txt
           echo "so_luong=$(ls van-ban-moi 2>/dev/null | wc -l)" >> "$GITHUB_OUTPUT"
 
+      # ----- từ đây chỉ chạy khi THẬT SỰ có văn bản mới -----
+
+      - name: Đăng nhập Google Cloud
+        if: steps.do.outputs.so_luong != '0'
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.WIF_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+        if: steps.do.outputs.so_luong != '0'
+
+      - name: Cài phụ thuộc đầy đủ để nhúng
+        if: steps.do.outputs.so_luong != '0'
+        run: pip install -r requirements-deploy.txt
+
+      - name: Tải kho hiện tại
+        if: steps.do.outputs.so_luong != '0'
+        run: |
+          # Object để public nên tải bằng curl, không cần xác thực.
+          curl -sfL "https://storage.googleapis.com/${BUCKET}/corpus/current.tar.gz" \
+            -o corpus.tar.gz
+          mkdir -p data && tar xzf corpus.tar.gz -C data && rm corpus.tar.gz
+          echo "kho hiện tại: $(python -c "
+          import json; print(json.load(open('data/corpus_meta.json'))['chunks'], 'chunk')")"
+
+      - name: Nạp văn bản mới vào kho
+        if: steps.do.outputs.so_luong != '0'
+        # --ingest-dir đọc JSON đã crawl ở bước trên, KHÔNG crawl lại.
+        # check_corpus_intact trong script sẽ dừng nếu kho teo bất thường.
+        run: python scripts/refresh_corpus.py --ingest-dir van-ban-moi
+
+      - name: Đóng gói và đẩy kho mới lên GCS
+        if: steps.do.outputs.so_luong != '0'
+        run: |
+          set -eu
+          tar czf corpus.tar.gz -C data chroma_db corpus_meta.json
+          DATE=$(date -u +%F)
+          gcloud storage cp corpus.tar.gz "gs://${BUCKET}/corpus/${DATE}.tar.gz"
+          gcloud storage cp "gs://${BUCKET}/corpus/${DATE}.tar.gz" \
+                            "gs://${BUCKET}/corpus/current.tar.gz"
+          echo "đã đẩy kho $(du -h corpus.tar.gz | cut -f1) lên GCS"
+          # Không cần deploy lại: Cloud Run chạy scale-to-zero, lần khởi động
+          # nguội kế tiếp sẽ tải bản current.tar.gz mới này.
+
       - name: Ghi tóm tắt
         if: always()
         run: |
@@ -88,8 +138,6 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-      # Chỉ tải lên khi thật sự có văn bản mới, để danh sách artifact không bị
-      # rác bởi những ngày yên ắng.
       - name: Giữ lại văn bản mới
         if: steps.do.outputs.so_luong != '0'
         uses: actions/upload-artifact@v4
@@ -98,16 +146,9 @@ jobs:
           path: van-ban-moi/
           retention-days: 90
 
-# ---------------------------------------------------------------------------
-# Bật chế độ nạp thẳng (sau khi đã deploy)
-#
-# Khi ChromaDB đã nằm trên HuggingFace Dataset, thay bước "Dò văn bản mới" bằng:
-#   - cài thêm torch bản CPU + chromadb + sentence-transformers
-#     (pip install -r requirements-deploy.txt)
-#   - tải kho về từ Dataset repo
-#   - bỏ cờ --dry-run để script tự delete_doc + insert + ghi corpus_meta.json
-#   - đẩy kho đã cập nhật ngược lên Dataset repo bằng secret HF_TOKEN
-#
-# Lượt chạy sẽ nặng lên khoảng 5-8 phút vì phải tải lên/xuống 612 MB và cài
-# torch. Repo public thì vẫn miễn phí, không giới hạn phút.
-# ---------------------------------------------------------------------------
+# Lưu ý vận hành:
+# - Repo này là PRIVATE nên Actions có tính phút (gói GitHub Pro cho 3.000
+#   phút/tháng). Ngày không có gì mới tốn khoảng một phút; ngày có văn bản mới
+#   tốn ~10-15 phút vì phải cài torch và nhúng. Vẫn dư xa.
+# - GitHub TỰ TẮT scheduled workflow khi repo không hoạt động 60 ngày, và không
+#   báo gì cả. Cứ ~50 ngày nên đẩy một commit hoặc chạy tay workflow_dispatch.
