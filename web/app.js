@@ -147,10 +147,106 @@
     }
   }
 
+  /* ---------- lịch sử tra cứu ---------- */
+  var History = window.LuatAIHistory;
+  var openId = null;      /* cuộc đang mở, để tô sáng trong danh sách */
+
+  function setSidebar(open) {
+    root.setAttribute('data-sidebar', open ? 'open' : 'closed');
+    document.getElementById('side-toggle')
+      .setAttribute('aria-expanded', open ? 'true' : 'false');
+    document.getElementById('scrim').hidden = !open;
+    try { localStorage.setItem('ng-sidebar', open ? 'open' : 'closed'); } catch (e) {}
+  }
+
+  function renderChatList() {
+    var items = History.list();
+    var box = document.getElementById('chat-list');
+    if (!items.length) {
+      box.innerHTML = '<p class="chatempty">Chưa có cuộc nào. Hỏi một câu là nó ' +
+        'hiện ở đây, và lần sau mở lại không phải hỏi lại.</p>';
+      return;
+    }
+    box.innerHTML = items.map(function (c) {
+      return '<div class="chatitem' + (c.id === openId ? ' on' : '') + '" data-id="' +
+        esc(c.id) + '" role="button" tabindex="0" title="' + esc(c.q) + '">' +
+        '<span class="q">' + esc(c.q) + '</span>' +
+        '<button class="del" type="button" data-del="' + esc(c.id) +
+        '" aria-label="Xoá cuộc này">×</button></div>';
+    }).join('');
+  }
+
+  /* Mở lại từ payload đã lưu: KHÔNG gọi lại API. Câu trả lời cũ dựng lại được
+   * trọn vẹn vì renderAnswer/renderSources chỉ phụ thuộc payload. */
+  function openChat(id) {
+    var c = History.get(id);
+    if (!c) return;
+    if (current) { current.close(); current = null; }
+    openId = id;
+    document.getElementById('q-input').value = c.q;
+    renderAnswer(c.payload);
+    renderSources(c.payload.chunks);
+    showState('answer');
+    renderChatList();
+    if (innerWidth < 1080) setSidebar(false);
+  }
+
+  document.getElementById('chat-list').addEventListener('click', function (e) {
+    var del = e.target.closest('[data-del]');
+    if (del) {
+      History.remove(del.dataset.del);
+      if (openId === del.dataset.del) { openId = null; showState('rest'); }
+      renderChatList();
+      return;
+    }
+    var item = e.target.closest('.chatitem');
+    if (item) openChat(item.dataset.id);
+  });
+  document.getElementById('chat-list').addEventListener('keydown', function (e) {
+    var item = e.target.closest('.chatitem');
+    if (item && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); openChat(item.dataset.id); }
+  });
+
+  document.getElementById('new-chat').addEventListener('click', function () {
+    if (current) { current.close(); current = null; }
+    openId = null;
+    document.getElementById('q-input').value = '';
+    showState('rest');
+    renderChatList();
+    document.getElementById('q-input').focus();
+    if (innerWidth < 1080) setSidebar(false);
+  });
+
+  document.getElementById('clear-chats').addEventListener('click', function () {
+    if (!History.list().length) return;
+    if (!confirm('Xoá toàn bộ lịch sử tra cứu trên máy này?')) return;
+    History.clear();
+    openId = null;
+    renderChatList();
+  });
+
+  document.getElementById('side-toggle').addEventListener('click', function () {
+    setSidebar(root.getAttribute('data-sidebar') !== 'open');
+  });
+  document.getElementById('scrim').addEventListener('click', function () { setSidebar(false); });
+  addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && root.getAttribute('data-sidebar') === 'open') setSidebar(false);
+  });
+
+  (function initSidebar() {
+    var pref = null;
+    try { pref = localStorage.getItem('ng-sidebar'); } catch (e) {}
+    // Màn hẹp thì ngăn kéo che hết nội dung, nên mặc định đóng.
+    setSidebar(pref ? pref === 'open' : innerWidth >= 1080);
+    renderChatList();
+  })();
+
   /* ---------- gọi API ---------- */
   var current = null;
+  var asking = '';        /* câu đang hỏi, để lưu vào lịch sử khi có kết quả */
   function ask(question) {
     if (current) { current.close(); current = null; }
+    asking = question;
     var ae = document.getElementById('ask-err');
     if (ae) ae.hidden = true;
     document.getElementById('think-q').textContent = question;
@@ -175,6 +271,9 @@
       renderAnswer(payload);
       renderSources(payload.chunks);
       showState('answer');
+      var saved = History.add(asking, payload);
+      openId = saved ? saved.id : null;
+      renderChatList();
       if (window.gsap) {
         gsap.from('#answer-body p', { opacity: 0, y: 8, duration: .45, stagger: .09 });
       }

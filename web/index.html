@@ -11,7 +11,24 @@
 <link rel="stylesheet" href="/style.css">
 </head>
 <body>
+<aside class="sidebar" id="sidebar" aria-label="Lịch sử tra cứu">
+  <div class="side-head">
+    <span class="side-title">Lịch sử tra cứu</span>
+    <button type="button" id="new-chat" class="newchat">+ Cuộc mới</button>
+  </div>
+  <nav class="chatlist" id="chat-list"></nav>
+  <div class="side-foot">
+    <p class="side-note">Lịch sử chỉ nằm trên máy này, không gửi đi đâu.</p>
+    <button type="button" id="clear-chats" class="clearchats">Xoá toàn bộ</button>
+  </div>
+</aside>
+<div class="scrim" id="scrim" hidden></div>
+
 <header class="topbar">
+  <button type="button" id="side-toggle" class="sidetoggle"
+          aria-label="Mở lịch sử tra cứu" aria-expanded="false">
+    <span></span><span></span><span></span>
+  </button>
   <a class="brand" href="/">
     <span class="mark" aria-hidden="true"></span>
     <span class="wordmark">luật<b>.ai</b></span>
@@ -107,6 +124,7 @@
 </footer>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script src="/history.js"></script>
 <script src="/app.js"></script>
 <script src="/field.js"></script>
 </body>

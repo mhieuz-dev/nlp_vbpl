@@ -472,6 +472,10 @@ body {
   border-bottom: 1.5px solid rgba(184,137,60,.4);
 }
 .ref:hover { border-bottom-color: var(--seal); }
+/* app.js:86 bóc cặp ngoặc khi đổi [3] thành thẻ, nên số đứng trần trông như
+   một con số trong câu. Trả ngoặc lại bằng CSS để nó đọc ra là số dẫn nguồn. */
+.ref::before { content: "["; }
+.ref::after  { content: "]"; }
 
 .noans {
   margin: 0 0 16px;
@@ -611,4 +615,145 @@ body {
     transition-duration: .01ms !important;
   }
   html { scroll-behavior: auto; }
+}
+
+/* ---------- thanh lịch sử ---------- */
+
+/* Mở/đóng điều khiển bằng data-sidebar trên <html>, để CSS quyết định cả vị
+   trí thanh lẫn phần lề của nội dung mà không cần JS đo đạc gì. */
+.sidebar {
+  position: fixed;
+  top: 0; left: 0; bottom: 0;
+  width: 272px;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  background: var(--navy);
+  border-right: 1px solid rgba(255,255,255,.10);
+  transform: translateX(-100%);
+  transition: transform .22s ease;
+}
+[data-sidebar="open"] .sidebar { transform: none; }
+
+.side-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 18px 16px 12px;
+}
+.side-title {
+  font: 600 11px/1 var(--mono);
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,.52);
+}
+.newchat {
+  font: 600 12px/1 var(--sans);
+  color: var(--navy);
+  background: var(--seal);
+  border: 0;
+  border-radius: 999px;
+  padding: 7px 11px;
+  cursor: pointer;
+}
+.newchat:hover { filter: brightness(1.08); }
+
+.chatlist { flex: 1; overflow-y: auto; padding: 4px 10px 10px; }
+.chatitem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 9px;
+  padding: 9px 8px 9px 11px;
+  cursor: pointer;
+  color: rgba(255,255,255,.80);
+  font-size: 13.5px;
+  line-height: 1.35;
+}
+.chatitem:hover { background: rgba(255,255,255,.08); }
+.chatitem.on { background: rgba(43,111,196,.34); color: #fff; }
+.chatitem .q {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chatitem .del {
+  flex: none;
+  opacity: 0;
+  border: 0;
+  background: transparent;
+  color: rgba(255,255,255,.66);
+  font-size: 15px;
+  line-height: 1;
+  padding: 2px 4px;
+  cursor: pointer;
+  border-radius: 5px;
+}
+.chatitem:hover .del, .chatitem .del:focus-visible { opacity: 1; }
+.chatitem .del:hover { background: rgba(255,255,255,.14); color: #fff; }
+.chatempty {
+  padding: 14px 11px;
+  font-size: 13px;
+  color: rgba(255,255,255,.42);
+  line-height: 1.5;
+}
+
+.side-foot {
+  padding: 12px 16px 16px;
+  border-top: 1px solid rgba(255,255,255,.10);
+}
+.side-note {
+  margin: 0 0 9px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: rgba(255,255,255,.44);
+}
+.clearchats {
+  font: 500 12px/1 var(--sans);
+  color: rgba(255,255,255,.72);
+  background: transparent;
+  border: 1px solid rgba(255,255,255,.20);
+  border-radius: 8px;
+  padding: 7px 10px;
+  cursor: pointer;
+}
+.clearchats:hover { color: #fff; border-color: rgba(255,255,255,.40); }
+
+/* Nút ba gạch: ở đây nó ĐÚNG là nút mở ngăn kéo, nên hình ba gạch là nghĩa
+   đen chứ không phải trang trí. */
+.sidetoggle {
+  flex: none;
+  display: grid;
+  gap: 4px;
+  width: 34px;
+  padding: 9px 8px;
+  background: transparent;
+  border: 1px solid var(--bd);
+  border-radius: 9px;
+  cursor: pointer;
+}
+.sidetoggle span {
+  display: block;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--fg-soft);
+}
+.sidetoggle:hover { border-color: var(--azure); }
+.sidetoggle:hover span { background: var(--azure); }
+
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 55;
+  background: rgba(7,26,51,.55);
+}
+
+/* Từ 1080px trở lên thì thanh đẩy nội dung sang chứ không đè lên, và không
+   cần lớp phủ. Hẹp hơn thì nó là ngăn kéo. */
+@media (min-width: 1080px) {
+  [data-sidebar="open"] body { padding-left: 272px; }
+  [data-sidebar="open"] .scrim { display: none; }
 }
