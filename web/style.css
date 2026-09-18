@@ -383,14 +383,17 @@ body {
 }
 
 .steps { display: grid; gap: 9px; margin-bottom: 26px; }
+/* Các bước giờ nằm trong dòng hội thoại trên NỀN GIẤY, không còn trên băng
+   xanh như bản một-câu-một-đáp. Màu cũ là chữ trắng trên nền trong suốt, đặt
+   lên giấy trắng thì gần như vô hình - đây là lỗi đã nhìn thấy khi chụp lại. */
 .step {
   display: flex;
   align-items: center;
   gap: 11px;
   font-size: 14px;
-  color: rgba(255,255,255,.88);
-  background: rgba(255,255,255,.10);
-  border: 1px solid rgba(255,255,255,.18);
+  color: var(--fg);
+  background: var(--card);
+  border: 1px solid var(--bd);
   border-radius: 9px;
   padding: 11px 15px;
 }
@@ -401,7 +404,7 @@ body {
   width: 22px; height: 22px;
   display: grid; place-items: center;
   border-radius: 50%;
-  border: 1px solid rgba(255,255,255,.3);
+  border: 1px solid var(--bd);
   flex: none;
 }
 .step .tx { display: flex; align-items: baseline; gap: 9px; flex: 1; min-width: 0; }
@@ -419,7 +422,7 @@ body {
 .skel .ln {
   height: 13px;
   border-radius: 4px;
-  background: linear-gradient(90deg, rgba(255,255,255,.12), rgba(255,255,255,.26), rgba(255,255,255,.12));
+  background: linear-gradient(90deg, var(--bd), var(--paper-2, rgba(43,111,196,.14)), var(--bd));
   background-size: 200% 100%;
   animation: sweep 1.4s linear infinite;
 }
@@ -756,4 +759,45 @@ body {
 @media (min-width: 1080px) {
   [data-sidebar="open"] body { padding-left: 272px; }
   [data-sidebar="open"] .scrim { display: none; }
+}
+
+/* ---------- dòng hội thoại nhiều lượt ---------- */
+
+.thread { display: grid; gap: 30px; }
+.turn { display: grid; gap: 14px; }
+
+/* Câu hỏi của người dùng: canh phải, nền đặc, để mắt tách ngay lời người hỏi
+   khỏi lời máy trả. */
+.ask { display: flex; justify-content: flex-end; }
+.ask span {
+  max-width: min(680px, 88%);
+  padding: 11px 16px;
+  border-radius: 16px 16px 4px 16px;
+  background: var(--blue);
+  color: #fff;
+  font-weight: 500;
+  line-height: 1.5;
+}
+[data-mode="dark"] .ask span { background: #1B4C9E; }
+
+.pending { display: grid; gap: 16px; }
+.turn + .turn { border-top: 1px solid var(--bd); padding-top: 30px; }
+
+/* Mười điều luật xếp dọc làm cột nguồn cao gấp đôi câu trả lời, để lại một
+   khoảng trống lớn bên trái. Cho cuộn trong thẻ và cắt tiêu đề còn hai dòng:
+   tên nghị định lặp lại y hệt ở mọi mục, đọc hết không thêm thông tin gì. */
+.card-src .srclist {
+  max-height: 430px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.srcitem .t {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+/* Thẻ nguồn bám theo khi cuộn câu trả lời dài. */
+@media (min-width: 861px) {
+  .card-src { position: sticky; top: 16px; align-self: start; }
 }

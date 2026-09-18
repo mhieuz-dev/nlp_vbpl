@@ -31,8 +31,7 @@
   /* ---------- chuyển trạng thái ---------- */
   var states = {
     rest: document.getElementById('state-rest'),
-    think: document.getElementById('state-think'),
-    answer: document.getElementById('state-answer')
+    thread: document.getElementById('state-thread')
   };
   function showState(name) {
     Object.keys(states).forEach(function (k) { states[k].hidden = k !== name; });
@@ -46,9 +45,9 @@
   }
   function fmt(n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.'); }
 
-  function renderSteps(done, active) {
+  function stepsHtml(done, active) {
     var order = ['retrieve', 'generate', 'cite'];
-    document.getElementById('steps').innerHTML = order.map(function (key, i) {
+    return order.map(function (key, i) {
       var cls = done[key] !== undefined ? 'done' : (key === active ? 'now' : 'wait');
       var icon = cls === 'done' ? '✓' : String(i + 1);
       var ms = done[key] !== undefined
@@ -58,6 +57,13 @@
         '<div class="tx"><b>' + STEP_LABELS[key][0] + '</b>' +
         '<span>' + STEP_LABELS[key][1] + '</span>' + ms + '</div></div>';
     }).join('');
+  }
+
+  /* Vẽ lại các bước bên trong ĐÚNG lượt đang chờ. Bản trước ghi vào một ô
+     #steps duy nhất; giờ mỗi lượt có ô của riêng nó nên phải trỏ đúng chỗ. */
+  function paintSteps(turnEl, done, active) {
+    var box = turnEl && turnEl.querySelector('.steps');
+    if (box) box.innerHTML = stepsHtml(done, active);
   }
 
   /* Nguyên văn điều luật được trích: serif, khung viền ngọc — tách khỏi lời máy. */
@@ -104,11 +110,9 @@
     return out.join('');
   }
 
-  function renderAnswer(payload) {
-    var lbl = document.querySelector('#state-answer .lbl b');
-    if (lbl && payload.model) lbl.textContent = payload.model;
+  function answerCardHtml(payload) {
     var noAnswer = payload.answered === false;
-    document.getElementById('answer-body').innerHTML =
+    var body =
       (noAnswer ? '<p class="noans">Không tìm thấy câu trả lời trong kho văn bản</p>' : '') +
       '<div class="synth">' + mdToHtml(payload.answer) + '</div>' +
       (noAnswer ? '' : renderStatutes(payload));
@@ -124,15 +128,17 @@
       { b: (totalMs / 1000).toFixed(1).replace('.', ',') + 's', s: 'phản hồi' },
       { b: String(payload.citations.length), s: 'trích dẫn' }
     ];
-    document.getElementById('metrics').innerHTML = metrics.map(function (m) {
-      return '<div class="metric"><b>' + m.b + '</b><span>' + m.s + '</span></div>';
-    }).join('');
+
+    return '<article class="card card-answer">' +
+      '<p class="lbl">Tổng hợp bởi <b>' + esc(payload.model || 'mô hình ngôn ngữ') + '</b></p>' +
+      '<div class="ansbody">' + body + '</div>' +
+      '<div class="metrics">' + metrics.map(function (m) {
+        return '<div class="metric"><b>' + m.b + '</b><span>' + m.s + '</span></div>';
+      }).join('') + '</div></article>';
   }
 
-  function renderSources(chunks) {
-    var cnt = document.getElementById('src-count');
-    if (cnt) cnt.textContent = 'top ' + chunks.length;
-    document.getElementById('src-list').innerHTML = chunks.map(function (c, i) {
+  function sourcesCardHtml(chunks) {
+    var items = chunks.map(function (c, i) {
       var label = c.article ? 'Điều ' + c.article : c.title;
       var pct = Math.round(c.score * 100);
       return '<div class="srcitem' + (i < 2 ? ' top' : '') + '" data-n="' + c.n + '">' +
@@ -141,10 +147,43 @@
         '<div class="t">' + esc(c.title) + '</div>' +
         '<div class="bar"><i style="width:' + pct + '%"></i></div></div>';
     }).join('');
-    if (window.gsap) {
-      gsap.from('#src-list .srcitem', { opacity: 0, y: 10, duration: .4, stagger: .06 });
-      gsap.from('#src-list .bar i', { scaleX: 0, transformOrigin: 'left', duration: .6, stagger: .06 });
-    }
+    return '<aside class="card card-src">' +
+      '<p class="lbl">Điều luật đã truy xuất <b>top ' + chunks.length + '</b></p>' +
+      '<div class="srclist">' + items + '</div></aside>';
+  }
+
+  function askedHtml(question) {
+    return '<div class="ask"><span>' + esc(question) + '</span></div>';
+  }
+
+  /* Một lượt đã có câu trả lời. */
+  function turnHtml(question, payload) {
+    return askedHtml(question) + '<div class="ansgrid">' +
+      answerCardHtml(payload) + sourcesCardHtml(payload.chunks) + '</div>';
+  }
+
+  /* Lượt đang chờ: câu hỏi hiện ngay, bên dưới là các bước đang chạy. */
+  function pendingHtml(question) {
+    return askedHtml(question) +
+      '<div class="pending"><div class="steps"></div>' +
+      '<div class="skel" aria-hidden="true">' +
+      '<div class="ln" style="width:96%"></div><div class="ln" style="width:88%"></div>' +
+      '<div class="ln" style="width:71%"></div><div class="ln" style="width:46%"></div>' +
+      '</div></div>';
+  }
+
+  function appendTurn(html) {
+    var el = document.createElement('article');
+    el.className = 'turn';
+    el.innerHTML = html;
+    document.getElementById('thread').appendChild(el);
+    return el;
+  }
+
+  function scrollToTurn(el) {
+    if (!el) return;
+    try { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+    catch (e) { el.scrollIntoView(); }
   }
 
   /* ---------- lịch sử tra cứu ---------- */
@@ -169,8 +208,8 @@
     }
     box.innerHTML = items.map(function (c) {
       return '<div class="chatitem' + (c.id === openId ? ' on' : '') + '" data-id="' +
-        esc(c.id) + '" role="button" tabindex="0" title="' + esc(c.q) + '">' +
-        '<span class="q">' + esc(c.q) + '</span>' +
+        esc(c.id) + '" role="button" tabindex="0" title="' + esc(c.title) + '">' +
+        '<span class="q">' + esc(c.title) + '</span>' +
         '<button class="del" type="button" data-del="' + esc(c.id) +
         '" aria-label="Xoá cuộc này">×</button></div>';
     }).join('');
@@ -181,21 +220,25 @@
   function openChat(id) {
     var c = History.get(id);
     if (!c) return;
-    if (current) { current.close(); current = null; }
+    if (current) { current.abort(); current = null; }
+    conv = c;
     openId = id;
-    document.getElementById('q-input').value = c.q;
-    renderAnswer(c.payload);
-    renderSources(c.payload.chunks);
-    showState('answer');
+    // Dựng lại từ payload đã lưu: KHÔNG gọi lại API lần nào.
+    document.getElementById('thread').innerHTML = '';
+    c.turns.forEach(function (tn) { appendTurn(turnHtml(tn.q, tn.payload)); });
+    document.getElementById('q-input').value = '';
+    showState('thread');
     renderChatList();
     if (innerWidth < 1080) setSidebar(false);
+    var last = document.querySelector('#thread .turn:last-child');
+    if (last) scrollToTurn(last);
   }
 
   document.getElementById('chat-list').addEventListener('click', function (e) {
     var del = e.target.closest('[data-del]');
     if (del) {
       History.remove(del.dataset.del);
-      if (openId === del.dataset.del) { openId = null; showState('rest'); }
+      if (openId === del.dataset.del) { newConv(); showState('rest'); }
       renderChatList();
       return;
     }
@@ -208,8 +251,8 @@
   });
 
   document.getElementById('new-chat').addEventListener('click', function () {
-    if (current) { current.close(); current = null; }
-    openId = null;
+    if (current) { current.abort(); current = null; }
+    newConv();
     document.getElementById('q-input').value = '';
     showState('rest');
     renderChatList();
@@ -221,7 +264,8 @@
     if (!History.list().length) return;
     if (!confirm('Xoá toàn bộ lịch sử tra cứu trên máy này?')) return;
     History.clear();
-    openId = null;
+    newConv();
+    showState('rest');
     renderChatList();
   });
 
@@ -242,69 +286,145 @@
   })();
 
   /* ---------- gọi API ---------- */
-  var current = null;
-  var asking = '';        /* câu đang hỏi, để lưu vào lịch sử khi có kết quả */
+
+  /* Cuộc hội thoại đang mở. turns giữ đủ để dựng lại màn hình VÀ để gửi ngữ
+     cảnh cho máy chủ ở lượt sau. */
+  var conv = null;      /* { id, title, turns: [{q, payload}] } */
+  var current = null;   /* AbortController của lượt đang chạy */
+  var asking = '';
+  var pendingEl = null;
+
+  function newConv() {
+    conv = null;
+    openId = null;
+    document.getElementById('thread').innerHTML = '';
+  }
+
+  /* Ngữ cảnh gửi lên máy chủ: chỉ ba cặp gần nhất. Máy chủ cũng chặn trần sáu
+     lượt, nhưng cắt sẵn ở đây để không gửi đi thứ chắc chắn bị bỏ. */
+  function historyForRequest() {
+    var turns = (conv && conv.turns) || [];
+    var out = [];
+    turns.slice(-3).forEach(function (tn) {
+      out.push({ role: 'user', content: tn.q });
+      if (tn.payload && tn.payload.answer) {
+        out.push({ role: 'assistant', content: String(tn.payload.answer).slice(0, 2000) });
+      }
+    });
+    return out;
+  }
+
+  /* Đọc text/event-stream từ một phản hồi fetch.
+     Vì sao không dùng EventSource nữa: EventSource chỉ biết GET, mà lịch sử hội
+     thoại không nhét vừa query string - URL vài KB sẽ bị proxy cắt ngang âm
+     thầm. Đổi lại phải tự tách khung sự kiện, nhưng được cái đọc được cả mã
+     trạng thái HTTP, nên phân biệt 503 "đang khởi động" với mất kết nối thật
+     mà không phải hỏi thêm /api/healthz. */
+  function readSSE(res, onEvent) {
+    var reader = res.body.getReader();
+    var dec = new TextDecoder();
+    var buf = '';
+    return reader.read().then(function step(r) {
+      if (r.done) return;
+      buf += dec.decode(r.value, { stream: true });
+      var frames = buf.split('\n\n');
+      buf = frames.pop();          /* khung cuối có thể còn dở */
+      frames.forEach(function (f) {
+        var ev = null, data = '';
+        f.split('\n').forEach(function (line) {
+          if (line.indexOf('event:') === 0) ev = line.slice(6).trim();
+          else if (line.indexOf('data:') === 0) data += line.slice(5).trim();
+        });
+        if (ev) { try { onEvent(ev, JSON.parse(data)); } catch (e) {} }
+      });
+      return reader.read().then(step);
+    });
+  }
+
   function ask(question) {
-    if (current) { current.close(); current = null; }
+    if (current) { current.abort(); current = null; }
     asking = question;
     var ae = document.getElementById('ask-err');
     if (ae) ae.hidden = true;
-    document.getElementById('think-q').textContent = question;
-    var done = {};
-    renderSteps(done, 'retrieve');
-    showState('think');
 
-    var es = new EventSource('/api/ask/stream?q=' + encodeURIComponent(question));
-    current = es;
+    if (!conv) conv = { id: null, title: question, turns: [] };
+    showState('thread');
+    pendingEl = appendTurn(pendingHtml(question));
+    var done = {};
+    paintSteps(pendingEl, done, 'retrieve');
+    scrollToTurn(pendingEl);
+    document.getElementById('q-input').value = '';
+
+    var ctl = new AbortController();
+    current = ctl;
+    var mine = pendingEl;
     var next = { retrieve: 'generate', generate: 'cite', cite: null };
 
-    es.addEventListener('step', function (e) {
-      var d = JSON.parse(e.data);
-      done[d.step] = d.ms;
-      renderSteps(done, next[d.step]);
-    });
-    es.addEventListener('done', function (e) {
-      es.close();
-      if (current === es) current = null;
-      warmSince = null;   /* trả lời được rồi: quên đồng hồ khởi động cũ đi */
-      var payload = JSON.parse(e.data);
-      renderAnswer(payload);
-      renderSources(payload.chunks);
-      showState('answer');
-      var saved = History.add(asking, payload);
-      openId = saved ? saved.id : null;
-      renderChatList();
-      if (window.gsap) {
-        gsap.from('#answer-body p', { opacity: 0, y: 8, duration: .45, stagger: .09 });
+    fetch('/api/ask/stream', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question: question, history: historyForRequest() }),
+      signal: ctl.signal
+    }).then(function (res) {
+      if (res.status === 503) {
+        return res.json().then(function (b) {
+          var d = (b && b.detail) || {};
+          removeTurn(mine);
+          warmThenRetry(question, d.elapsed_s);
+        });
       }
-      window.dispatchEvent(new CustomEvent('luatai:answer', { detail: payload }));
-    });
-    es.addEventListener('error', function (e) {
-      if (current !== es) return;
-      es.close();
-      current = null;
+      if (!res.ok || !res.body) throw new Error('HTTP ' + res.status);
 
-      var msg = null;
-      try { if (e.data) msg = JSON.parse(e.data).error; } catch (_) {}
-      if (msg) { failAsk(msg); return; }
-
-      /* EventSource không cho đọc mã trạng thái, nên 503 "đang khởi động" và
-         mất kết nối thật trông giống hệt nhau ở đây. Máy chủ chạy scale-to-zero
-         nên khởi động nguội mất 60-120 giây và đó là trường hợp THƯỜNG GẶP -
-         báo "mất kết nối" lúc đó là nói dối. Hỏi /api/healthz để biết chắc. */
-      fetch('/api/healthz').then(function (r) { return r.json(); }).then(function (h) {
-        if (h && h.ready === false && h.state !== 'failed') warmThenRetry(question, h.elapsed_s);
-        else failAsk('Mất kết nối tới máy chủ. Thử lại giúp mình.');
-      }).catch(function () {
-        failAsk('Mất kết nối tới máy chủ. Thử lại giúp mình.');
+      return readSSE(res, function (ev, d) {
+        if (ev === 'step') {
+          done[d.step] = d.ms;
+          paintSteps(mine, done, next[d.step]);
+        } else if (ev === 'error') {
+          removeTurn(mine);
+          failAsk(d.error);
+        } else if (ev === 'done') {
+          warmSince = null;   /* trả lời được rồi: quên đồng hồ khởi động cũ đi */
+          finishTurn(mine, question, d);
+        }
       });
+    }).catch(function (err) {
+      if (err && err.name === 'AbortError') return;
+      removeTurn(mine);
+      failAsk('Mất kết nối tới máy chủ. Thử lại giúp mình.');
+    }).then(function () {
+      if (current === ctl) current = null;
     });
+  }
+
+  function removeTurn(el) {
+    if (el && el.parentNode) el.parentNode.removeChild(el);
+    if (pendingEl === el) pendingEl = null;
+    // Lượt hỏng bị gỡ đi mà cuộc chưa có lượt nào thành công thì coi như chưa
+    // mở cuộc nào, để câu sau không bị dính ngữ cảnh của một lượt thất bại.
+    if (conv && !conv.turns.length) conv = null;
+  }
+
+  function finishTurn(el, question, payload) {
+    el.innerHTML = turnHtml(question, payload);
+    if (pendingEl === el) pendingEl = null;
+    conv.turns.push({ q: question, payload: payload });
+    conv = History.save(conv);
+    openId = conv.id;
+    renderChatList();
+    scrollToTurn(el);
+    if (window.gsap) {
+      gsap.from(el.querySelectorAll('.srcitem'),
+                { opacity: 0, y: 10, duration: .4, stagger: .06 });
+    }
+    window.dispatchEvent(new CustomEvent('luatai:answer', { detail: payload }));
   }
 
   function failAsk(msg) {
     var ae = document.getElementById('ask-err');
     if (ae) { ae.textContent = msg + ' — bấm Tra cứu để thử lại.'; ae.hidden = false; }
-    showState('rest');
+    // Một lượt hỏng không được xoá cả cuộc đang xem: chỉ về trang chủ khi
+    // chưa có lượt nào thành công.
+    showState(conv && conv.turns.length ? 'thread' : 'rest');
   }
 
   /* Máy chủ đang nạp model: nói thật là đang khởi động, rồi tự thử lại thay vì
@@ -324,7 +444,7 @@
                      + 'thường mất 60-120 giây. Đang tự thử lại…';
       ae.hidden = false;
     }
-    showState('rest');
+    showState(conv && conv.turns.length ? 'thread' : 'rest');
     setTimeout(function () { ask(question); }, WARM_RETRY_MS);
   }
 
@@ -334,13 +454,15 @@
     if (q) ask(q);
   });
   document.getElementById('back-btn').addEventListener('click', function () {
-    // Đang hỏi dở mà bấm quay lại thì phải đóng luồng SSE, không thì câu trả
-    // lời cũ vẫn về và tự ý kéo màn hình sang trạng thái answer.
-    if (current) { current.close(); current = null; }
+    // Đang hỏi dở mà bấm quay lại thì phải huỷ luồng, không thì câu trả lời
+    // vẫn về và tự ý kéo màn hình sang cuộc vừa rời đi.
+    if (current) { current.abort(); current = null; }
     var ae = document.getElementById('ask-err');
     if (ae) ae.hidden = true;
+    newConv();
     document.getElementById('q-input').value = '';
     showState('rest');
+    renderChatList();
     document.getElementById('q-input').focus();
   });
   document.getElementById('qchips').addEventListener('click', function (e) {
@@ -348,17 +470,23 @@
     document.getElementById('q-input').value = e.target.textContent;
     ask(e.target.textContent);
   });
-  document.getElementById('answer-body').addEventListener('mouseover', function (e) {
+  /* Rê vào [n] thì làm mờ các nguồn khác. Uỷ quyền trên cả dòng hội thoại và
+     giới hạn trong đúng lượt đang rê - nhiều lượt cùng có [3] nhưng [3] của
+     mỗi lượt trỏ tới điều luật khác nhau. */
+  var thread = document.getElementById('thread');
+  thread.addEventListener('mouseover', function (e) {
     if (!e.target.classList.contains('ref')) return;
+    var turn = e.target.closest('.turn');
+    if (!turn) return;
     var n = e.target.dataset.n;
-    document.querySelectorAll('#src-list .srcitem').forEach(function (el) {
+    turn.querySelectorAll('.srcitem').forEach(function (el) {
       el.style.opacity = el.dataset.n === n ? '1' : '.4';
     });
   });
-  document.getElementById('answer-body').addEventListener('mouseout', function () {
-    document.querySelectorAll('#src-list .srcitem').forEach(function (el) {
-      el.style.opacity = '1';
-    });
+  thread.addEventListener('mouseout', function (e) {
+    var turn = e.target.closest && e.target.closest('.turn');
+    if (!turn) return;
+    turn.querySelectorAll('.srcitem').forEach(function (el) { el.style.opacity = '1'; });
   });
 
   // Thống kê kho lấy từ máy chủ chứ không viết cứng trong HTML: con số viết

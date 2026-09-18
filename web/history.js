@@ -9,17 +9,37 @@
  * Đánh đổi: đổi máy hoặc xoá dữ liệu duyệt web là mất lịch sử.
  */
 (function () {
-  var KEY = 'ng-chats-v1';
+  var KEY = 'ng-chats-v2';
+  var OLD_KEY = 'ng-chats-v1';   /* bản một-câu-một-đáp */
   var MAX = 50;
 
   function read() {
     try {
       var raw = localStorage.getItem(KEY);
-      var v = raw ? JSON.parse(raw) : [];
-      return Array.isArray(v) ? v : [];
+      if (raw) {
+        var v = JSON.parse(raw);
+        return Array.isArray(v) ? v : [];
+      }
+      return migrate();
     } catch (e) {
       return [];   // hỏng định dạng hoặc bị chặn: coi như chưa có gì
     }
+  }
+
+  /* Bản v1 lưu mỗi mục là một cặp hỏi-đáp; v2 là một cuộc gồm nhiều lượt. Đổi
+     một lần khi đọc, để người đã dùng bản trước không mở lên thấy trắng trơn. */
+  function migrate() {
+    var raw = null;
+    try { raw = localStorage.getItem(OLD_KEY); } catch (e) {}
+    if (!raw) return [];
+    var cu = [];
+    try { cu = JSON.parse(raw) || []; } catch (e) { return []; }
+    var moi = cu.map(function (c) {
+      return { id: c.id, title: c.q, at: c.at, turns: [{ q: c.q, payload: c.payload }] };
+    });
+    write(moi);
+    try { localStorage.removeItem(OLD_KEY); } catch (e) {}
+    return moi;
   }
 
   /* Ghi, và nếu hết chỗ thì bỏ dần cuộc cũ nhất rồi thử lại. Một câu trả lời
@@ -44,16 +64,15 @@
       return found;
     },
 
-    /* Trả về bản ghi vừa lưu để bên gọi biết id mà đánh dấu đang mở. */
-    add: function (question, payload) {
-      var item = {
-        id: String(Date.now()) + '-' + Math.random().toString(36).slice(2, 8),
-        q: question,
-        at: Date.now(),
-        payload: payload
-      };
-      write([item].concat(read()).slice(0, MAX));
-      return item;
+    /* Ghi một cuộc: mới thì thêm vào đầu, đã có thì cập nhật và đẩy lên đầu.
+       Trả lại chính cuộc đó (đã gắn id) để bên gọi dùng tiếp. */
+    save: function (conv) {
+      if (!conv.id) conv.id = String(Date.now()) + '-' + Math.random().toString(36).slice(2, 8);
+      conv.at = Date.now();
+      if (!conv.title) conv.title = (conv.turns[0] || {}).q || 'Cuộc mới';
+      var con_lai = read().filter(function (c) { return c.id !== conv.id; });
+      write([conv].concat(con_lai).slice(0, MAX));
+      return conv;
     },
 
     remove: function (id) {

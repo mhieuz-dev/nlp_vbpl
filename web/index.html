@@ -86,32 +86,15 @@
     </dl>
   </div>
 
-  <section id="state-think" class="think" hidden>
-    <div class="qecho" id="think-q"></div>
-    <div class="steps" id="steps"></div>
-    <div class="skel" aria-hidden="true">
-      <div class="ln" style="width:96%"></div>
-      <div class="ln" style="width:88%"></div>
-      <div class="ln" style="width:71%"></div>
-      <div class="ln" style="width:46%"></div>
-    </div>
-  </section>
   </div>
 </div>
 
 <div class="stage stage-answer">
-  <section id="state-answer" hidden>
-    <div class="ansgrid">
-      <article class="card card-answer">
-        <p class="lbl">Tổng hợp bởi <b>mô hình ngôn ngữ</b></p>
-        <div id="answer-body"></div>
-        <div class="metrics" id="metrics"></div>
-      </article>
-      <aside class="card card-src">
-        <p class="lbl">Điều luật đã truy xuất <b id="src-count">top 5</b></p>
-        <div id="src-list"></div>
-      </aside>
-    </div>
+  <!-- Dòng hội thoại: mỗi lượt là một câu hỏi kèm câu trả lời của nó. Lượt
+       đang chờ cũng nằm ở đây, nên các bước xử lý hiện ngay dưới câu vừa hỏi
+       thay vì chiếm cả màn hình như bản một-câu-một-đáp trước. -->
+  <section id="state-thread" hidden>
+    <div class="thread" id="thread"></div>
   </section>
 </div>
 </main>
