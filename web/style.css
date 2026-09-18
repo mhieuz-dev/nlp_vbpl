@@ -100,6 +100,22 @@ body {
 .band:has(#state-rest[hidden]) .searchbar { margin-top: 0; }
 .err { text-align: center; }
 
+/* Nút quay lại chỉ có nghĩa khi đã rời trang chủ. */
+.backbtn {
+  display: none;
+  margin: 0 auto 12px;
+  padding: 7px 14px;
+  font: 500 13px/1 var(--sans);
+  color: rgba(255,255,255,.88);
+  background: rgba(255,255,255,.10);
+  border: 1px solid rgba(255,255,255,.22);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background .16s ease;
+}
+.backbtn:hover { background: rgba(255,255,255,.18); }
+.band:has(#state-rest[hidden]) .backbtn { display: block; }
+
 /* Trường vector của chính kho dữ liệu, làm kết cấu cho băng xanh. Thiếu file
    thì field.js im lặng, băng vẫn đẹp. */
 .field {

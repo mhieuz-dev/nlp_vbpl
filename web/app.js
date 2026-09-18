@@ -234,6 +234,16 @@
     var q = document.getElementById('q-input').value.trim();
     if (q) ask(q);
   });
+  document.getElementById('back-btn').addEventListener('click', function () {
+    // Đang hỏi dở mà bấm quay lại thì phải đóng luồng SSE, không thì câu trả
+    // lời cũ vẫn về và tự ý kéo màn hình sang trạng thái answer.
+    if (current) { current.close(); current = null; }
+    var ae = document.getElementById('ask-err');
+    if (ae) ae.hidden = true;
+    document.getElementById('q-input').value = '';
+    showState('rest');
+    document.getElementById('q-input').focus();
+  });
   document.getElementById('qchips').addEventListener('click', function (e) {
     if (!e.target.classList.contains('qchip')) return;
     document.getElementById('q-input').value = e.target.textContent;
