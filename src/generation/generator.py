@@ -11,9 +11,12 @@ Ví dụ chuyển sang Groq (free, không cần thẻ):
     LLM_BASE_URL=https://api.groq.com/openai/v1
     LLM_MODEL=llama-3.3-70b-versatile
 """
+import logging
 import os
 
 from src.pipeline.followup import strip_citations
+
+logger = logging.getLogger(__name__)
 import re
 import time
 
@@ -213,6 +216,12 @@ tới. Giữ nguyên thuật ngữ pháp lý. Chỉ in ra câu hỏi, không gi�
 """
 
 
+def _answer_text(response) -> str:
+    """Nội dung câu trả lời sau khi bỏ phần suy luận, rỗng nếu model không viết gì."""
+    raw = response.choices[0].message.content or ""
+    return _THINK_RE.sub("", raw).strip()
+
+
 def _is_overloaded(exc: Exception) -> bool:
     s = str(exc)
     return any(k in s for k in ("503", "UNAVAILABLE", "high demand", "overloaded"))
@@ -295,9 +304,22 @@ class Generator:
         prompt = build_prompt(question, chunks, self.law_types)
         messages = build_messages(prompt, history)
         response = self._call_with_retry(messages)
+        answer = _answer_text(response)
 
-        raw = response.choices[0].message.content or ""
-        answer = _THINK_RE.sub("", raw).strip()
+        if not answer:
+            # Model tiêu hết trần token vào phần suy luận rồi không còn chỗ
+            # viết câu trả lời, nên nội dung trả về rỗng. Bắt được trên bản
+            # chạy thật, đúng ở câu hỏi nối tiếp: có lịch sử hội thoại thì nó
+            # suy luận dài hơn nên chạm trần thường xuyên hơn.
+            #
+            # Thử lại một lần với phần suy luận tắt đi, dồn cả trần token cho
+            # câu trả lời. Không nâng MAX_OUTPUT_TOKENS vì hạn mức token mỗi
+            # phút của Groq đã từng chặn ở đúng chỗ này (Limit 1000).
+            try:
+                answer = _answer_text(self._create(messages, with_reasoning=False))
+            except Exception:
+                logger.exception("gọi lại không-suy-luận cũng hỏng")
+
         if not answer:
             answer = "Hệ thống không tạo được câu trả lời cho câu hỏi này."
 

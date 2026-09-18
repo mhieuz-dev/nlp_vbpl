@@ -326,3 +326,57 @@ def test_build_messages_bo_qua_luot_rong_va_vai_tro_la():
         {"role": "user", "content": "giữ lại"},
     ])
     assert [x["content"] for x in m] == ["giữ lại", "PROMPT"]
+
+
+def test_goi_lai_khong_suy_luan_khi_model_tra_ve_rong():
+    """Model tiêu hết trần token vào suy luận thì nội dung về rỗng.
+
+    Bắt được trên bản chạy thật ở câu hỏi nối tiếp: có lịch sử hội thoại thì
+    model suy luận dài hơn nên chạm trần thường xuyên hơn. Thay vì bỏ cuộc,
+    gọi lại một lần với suy luận tắt để dồn cả trần token cho câu trả lời.
+    """
+    from src.generation.generator import Generator
+
+    class FakeMsg:
+        def __init__(self, c): self.content = c
+    class FakeChoice:
+        def __init__(self, c): self.message = FakeMsg(c)
+    class FakeRes:
+        def __init__(self, c): self.choices = [FakeChoice(c)]
+
+    g = Generator.__new__(Generator)
+    g.law_types = None
+    g.model_name = "fake"
+    goi = []
+
+    def fake_create(messages, with_reasoning):
+        goi.append(with_reasoning)
+        return FakeRes("" if with_reasoning else "Phạt 4 triệu [1].")
+
+    g._create = fake_create
+    g._call_with_retry = lambda m: fake_create(m, with_reasoning=True)
+
+    out = g.generate("câu hỏi?", [{"title": "Luật X", "text": "Điều 1."}])
+    assert goi == [True, False]          # có gọi lại, đúng một lần
+    assert out["answer"] == "Phạt 4 triệu [1]."
+    assert out["citations"] == [1]
+
+
+def test_van_bao_khong_tao_duoc_khi_ca_hai_lan_deu_rong():
+    from src.generation.generator import Generator
+
+    class FakeMsg:
+        content = ""
+    class FakeChoice:
+        message = FakeMsg()
+    class FakeRes:
+        choices = [FakeChoice()]
+
+    g = Generator.__new__(Generator)
+    g.law_types = None
+    g.model_name = "fake"
+    g._create = lambda messages, with_reasoning: FakeRes()
+    g._call_with_retry = lambda m: FakeRes()
+
+    out = g.generate("câu hỏi?", [{"title": "Luật X", "text": "Điều 1."}])
+    assert out["answer"] == "Hệ thống không tạo được câu trả lời cho câu hỏi này."
