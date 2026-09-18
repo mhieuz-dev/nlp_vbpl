@@ -122,10 +122,15 @@ class AskRequest(BaseModel):
     question: str = Field(min_length=1, max_length=1000)
 
 
-@app.get("/healthz")
+@app.get("/api/healthz")
 def healthz():
-    """Cloud Run startup probe trỏ vào đây. alive=true ngay khi cổng mở;
-    ready=true khi pipeline đã dựng xong."""
+    """Trạng thái nạp pipeline: alive=true ngay khi cổng mở, ready=true khi
+    model đã dựng xong. Giao diện hỏi endpoint này để phân biệt "đang khởi
+    động" với "mất kết nối".
+
+    Đặt dưới /api/ chứ KHÔNG phải /healthz: Cloud Run chiếm dụng /healthz cho
+    health check nội bộ của nó và trả 404 từ Google Frontend, request không bao
+    giờ tới container. Đo thật trên bản deploy.""" 
     return {
         "alive": True,
         "ready": _pipeline is not None,

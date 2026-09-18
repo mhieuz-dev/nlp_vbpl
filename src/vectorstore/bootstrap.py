@@ -17,15 +17,20 @@ DEFAULT_LOCAL_DIR = Path("data")
 CHUNK = 1 << 20
 
 
-def _http_get(url: str) -> bytes:
+def _http_download(url: str, dest: Path) -> None:
+    """Tải thẳng ra đĩa theo từng khối.
+
+    KHÔNG gom vào RAM: tarball 331 MB cộng 620 MB giải nén, trong khi hệ thống
+    tệp của Cloud Run là tmpfs nằm trong RAM và tính vào hạn mức bộ nhớ của
+    instance. Giữ cả blob trong bộ nhớ Python là thổi thêm 331 MB vô ích.
+    """
     import requests
 
-    res = requests.get(url, timeout=300, stream=True)
-    res.raise_for_status()
-    buf = io.BytesIO()
-    for part in res.iter_content(CHUNK):
-        buf.write(part)
-    return buf.getvalue()
+    with requests.get(url, timeout=300, stream=True) as res:
+        res.raise_for_status()
+        with dest.open("wb") as f:
+            for part in res.iter_content(CHUNK):
+                f.write(part)
 
 
 def ensure_corpus(local_dir=DEFAULT_LOCAL_DIR, url=None, fetch=None) -> Path:
@@ -48,8 +53,18 @@ def ensure_corpus(local_dir=DEFAULT_LOCAL_DIR, url=None, fetch=None) -> Path:
             "thì đặt CORPUS_URL trỏ tới tarball .tar.gz của kho trên GCS."
         )
 
-    blob = (fetch or _http_get)(url)
     local_dir.mkdir(parents=True, exist_ok=True)
-    with tarfile.open(fileobj=io.BytesIO(blob), mode="r:gz") as tar:
-        tar.extractall(local_dir)
+    if fetch is not None:  # test tiêm sẵn bytes
+        with tarfile.open(fileobj=io.BytesIO(fetch(url)), mode="r:gz") as tar:
+            tar.extractall(local_dir)
+        return local_dir
+
+    tmp = local_dir / ".corpus.tar.gz"
+    try:
+        _http_download(url, tmp)
+        with tarfile.open(tmp, mode="r:gz") as tar:
+            tar.extractall(local_dir)
+    finally:
+        # Xoá ngay: trên tmpfs của Cloud Run, file này ăn 331 MB hạn mức RAM.
+        tmp.unlink(missing_ok=True)
     return local_dir

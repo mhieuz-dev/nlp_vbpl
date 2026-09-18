@@ -251,3 +251,34 @@ def test_prompt_forbids_naming_document_numbers_not_in_corpus():
         assert "số hiệu" in prompt
     finally:
         ctx.stop()
+
+
+def test_caps_max_tokens_to_stay_under_provider_limit():
+    """Groq free tier chặn theo output-tokens-per-minute, không phải số request.
+
+    Đo thật trên bản deploy: model qwen/qwen3.8-27b có OTPM limit 1000, mà khi
+    không đặt max_tokens thì Groq lấy mặc định của model (~2048) làm "expected
+    output" và từ chối NGAY cả request đầu tiên:
+      "Limit 1000, Requested 1473 ... reduce max_tokens"
+    Câu trả lời pháp lý thật thường 200-500 token nên trần 800 không cắt cụt gì.
+    """
+    from src.generation.generator import MAX_OUTPUT_TOKENS, Generator
+
+    assert MAX_OUTPUT_TOKENS < 1000, "phải dưới hạn mức OTPM của Groq free tier"
+
+    sent = {}
+
+    class FakeCompletions:
+        def create(self, **kw):
+            sent.update(kw)
+            raise RuntimeError("dừng ở đây, chỉ cần xem tham số")
+
+    g = Generator.__new__(Generator)
+    g.model_name = "m"
+    g.law_types = None
+    g.client = type("C", (), {"chat": type("Ch", (), {"completions": FakeCompletions()})()})()
+    try:
+        g._create([{"role": "user", "content": "x"}], with_reasoning=False)
+    except RuntimeError:
+        pass
+    assert sent["max_tokens"] == MAX_OUTPUT_TOKENS

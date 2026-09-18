@@ -192,8 +192,8 @@
       /* EventSource không cho đọc mã trạng thái, nên 503 "đang khởi động" và
          mất kết nối thật trông giống hệt nhau ở đây. Máy chủ chạy scale-to-zero
          nên khởi động nguội mất 60-120 giây và đó là trường hợp THƯỜNG GẶP -
-         báo "mất kết nối" lúc đó là nói dối. Hỏi /healthz để biết chắc. */
-      fetch('/healthz').then(function (r) { return r.json(); }).then(function (h) {
+         báo "mất kết nối" lúc đó là nói dối. Hỏi /api/healthz để biết chắc. */
+      fetch('/api/healthz').then(function (r) { return r.json(); }).then(function (h) {
         if (h && h.ready === false && h.state !== 'failed') warmThenRetry(question, h.elapsed_s);
         else failAsk('Mất kết nối tới máy chủ. Thử lại giúp mình.');
       }).catch(function () {

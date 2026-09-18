@@ -71,6 +71,13 @@ DEFAULT_MODEL = "gemini-flash-latest"  # 3.6-flash free tier chỉ 20 request/NG
 # không hỗ trợ tham số này thì _call_with_retry gọi lại lần nữa, bỏ nó ra.
 REASONING_EFFORT = os.getenv("LLM_REASONING_EFFORT", "low")
 
+# Groq free tier chặn theo OUTPUT TOKENS MỖI PHÚT chứ không phải số request:
+# model qwen/qwen3.8-27b có OTPM limit 1000. Không đặt max_tokens thì Groq lấy
+# mặc định của model (~2048) làm "expected output" và từ chối ngay cả request
+# đầu tiên ("Limit 1000, Requested 1473 ... reduce max_tokens"). Đo trên bản
+# deploy thật. Câu trả lời pháp lý thường 200-500 token nên 800 không cắt cụt gì.
+MAX_OUTPUT_TOKENS = int(os.getenv("LLM_MAX_OUTPUT_TOKENS", "800"))
+
 # 503 "high demand" từ Gemini rất hay gặp; chờ rồi thử lại thay vì ném cho người dùng.
 RETRY_DELAYS = (2.0, 5.0)
 
@@ -192,7 +199,8 @@ class Generator:
         )
 
     def _create(self, messages, with_reasoning: bool):
-        kwargs = {"model": self.model_name, "messages": messages}
+        kwargs = {"model": self.model_name, "messages": messages,
+                  "max_tokens": MAX_OUTPUT_TOKENS}
         if with_reasoning and REASONING_EFFORT:
             kwargs["reasoning_effort"] = REASONING_EFFORT
         return self.client.chat.completions.create(**kwargs)

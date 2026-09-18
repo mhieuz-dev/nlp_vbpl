@@ -182,7 +182,7 @@ def warming_client(monkeypatch):
 
 
 def test_healthz_ok_before_pipeline_ready(warming_client):
-    r = warming_client.get("/healthz")
+    r = warming_client.get("/api/healthz")
     assert r.status_code == 200
     body = r.json()
     assert body["alive"] is True
@@ -220,7 +220,7 @@ def test_healthz_ready_true_when_pipeline_loaded(monkeypatch):
     import server
     monkeypatch.setattr(server, "_pipeline", object())
     monkeypatch.setattr(server, "_load_state", "ready")
-    r = TestClient(server.app).get("/healthz")
+    r = TestClient(server.app).get("/api/healthz")
     assert r.json() == {"alive": True, "ready": True, "state": "ready", "elapsed_s": None}
 
 
