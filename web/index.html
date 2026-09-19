@@ -1,114 +1,262 @@
 <!doctype html>
-<html lang="vi">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>luật.ai — Tra cứu văn bản quy phạm pháp luật Việt Nam</title>
-<meta name="description" content="Hỏi một câu, nhận điều luật gốc. Mỗi câu trả lời dẫn về đúng điều khoản trong văn bản quy phạm pháp luật đã số hoá.">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@300;400;500;600;700;800;900&family=Spectral:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500;700&display=swap">
-<link rel="stylesheet" href="/style.css">
-</head>
-<body>
-<aside class="sidebar" id="sidebar" aria-label="Lịch sử tra cứu">
-  <div class="side-head">
-    <span class="side-title">Lịch sử tra cứu</span>
-    <button type="button" id="new-chat" class="newchat">+ Cuộc mới</button>
-  </div>
-  <nav class="chatlist" id="chat-list"></nav>
-  <div class="side-foot">
-    <p class="side-note">Lịch sử chỉ nằm trên máy này, không gửi đi đâu.</p>
-    <button type="button" id="clear-chats" class="clearchats">Xoá toàn bộ</button>
-  </div>
-</aside>
-<div class="scrim" id="scrim" hidden></div>
-
-<header class="topbar">
-  <button type="button" id="side-toggle" class="sidetoggle"
-          aria-label="Mở lịch sử tra cứu" aria-expanded="false">
-    <span></span><span></span><span></span>
-  </button>
-  <a class="brand" href="/">
-    <span class="mark" aria-hidden="true"></span>
-    <span class="wordmark">luật<b>.ai</b></span>
-  </a>
-  <div class="meta">
-    <span class="tag" title="Mô hình nhúng dùng để tìm điều luật">multilingual-e5-base</span>
-    <span class="tag"><b id="corpus-count">—</b> điều đã index</span>
-    <span class="tag" id="corpus-freshness" title="Ngày cập nhật kho và ngày ban hành văn bản mới nhất">—</span>
-    <span class="mode" role="group" aria-label="Chế độ màu">
-      <button type="button" data-set="light" aria-pressed="false">Sáng</button>
-      <button type="button" data-set="dark" aria-pressed="true">Tối</button>
-    </span>
-  </div>
-</header>
-
-<main>
-<div class="band">
-  <canvas class="field" id="field" aria-hidden="true"></canvas>
-  <div class="stage">
-  <section id="state-rest" class="hero">
-    <p class="eyebrow">Tra cứu văn bản quy phạm pháp luật</p>
-    <h1>Hỏi một câu.<br><em>Nhận điều luật thật.</em></h1>
-    <p class="sub">Mỗi câu trả lời dẫn về đúng điều khoản gốc. Không có trong kho
-      thì hệ thống nói thẳng là không có, chứ không đoán.</p>
-
-  </section>
-
-  <!-- Ô tra cứu nằm NGOÀI #state-rest một cách có chủ ý. app.js ẩn #state-rest
-       khi hiện câu trả lời, nên để ô tra cứu bên trong thì hỏi xong là mất
-       đường hỏi tiếp. Ở ngoài thì nó theo suốt cả ba trạng thái. -->
-  <button class="backbtn" id="back-btn" type="button">← Quay lại trang chủ</button>
-
-  <form class="searchbar" id="ask-form" role="search">
-    <input id="q-input" type="text" autocomplete="off"
-           aria-label="Câu hỏi pháp luật"
-           placeholder="Vượt đèn đỏ bị phạt bao nhiêu tiền?" maxlength="1000">
-    <button type="submit" id="ask-btn">Tra cứu</button>
-  </form>
-  <p class="err" id="ask-err" role="alert" hidden></p>
-
-  <div class="restextra">
-    <div class="qchips" id="qchips">
-      <button class="qchip" type="button">Tuổi kết hôn tối thiểu?</button>
-      <button class="qchip" type="button">Thời hiệu khởi kiện dân sự</button>
-      <button class="qchip" type="button">Di chúc hợp lệ cần gì?</button>
-      <button class="qchip" type="button">Nồng độ cồn phạt bao nhiêu?</button>
-      <button class="qchip" type="button">Bồi thường ngoài hợp đồng</button>
+<html lang="vi" data-state="rest">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="theme-color" content="#141310" />
+    <title>H2N LAW | Hỏi luật. Hiểu rõ.</title>
+    <meta
+      name="description"
+      content="Trợ lý tra cứu pháp luật Việt Nam. Hỏi bằng ngôn ngữ tự nhiên, đọc câu trả lời và đối chiếu điều khoản gốc."
+    />
+    <script>
+      try {
+        var m = localStorage.getItem("ng-mode");
+        document.documentElement.dataset.mode =
+          m === "light" || m === "dark"
+            ? m
+            : matchMedia("(prefers-color-scheme: light)").matches
+              ? "light"
+              : "dark";
+      } catch (e) {}
+    </script>
+    <link rel="preload" href="/assets/background.jpg" as="image" />
+    <link rel="stylesheet" href="/assets/fonts.css" />
+    <link rel="stylesheet" href="/vendor/pannellum/pannellum.css" />
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#q-input">Đến ô hỏi luật</a>
+    <div class="scene" aria-hidden="true">
+      <div id="panorama-scene"></div>
     </div>
-
-    <dl class="statrow">
-      <div><dt>Điều luật</dt><dd id="stat-chunks">—</dd></div>
-      <div><dt>Văn bản</dt><dd id="stat-docs">—</dd></div>
-      <div><dt>Nguồn mỗi câu</dt><dd>Top-10</dd></div>
-      <div><dt>Độ khớp TB</dt><dd>0,88</dd></div>
-    </dl>
-  </div>
-
-  </div>
-</div>
-
-<div class="stage stage-answer">
-  <!-- Dòng hội thoại: mỗi lượt là một câu hỏi kèm câu trả lời của nó. Lượt
-       đang chờ cũng nằm ở đây, nên các bước xử lý hiện ngay dưới câu vừa hỏi
-       thay vì chiếm cả màn hình như bản một-câu-một-đáp trước. -->
-  <section id="state-thread" hidden>
-    <div class="thread" id="thread"></div>
-  </section>
-</div>
-</main>
-
-<footer class="foot">
-  <p><b>Đồ án môn Xử lý ngôn ngữ tự nhiên.</b> Đây không phải cổng thông tin của
-    cơ quan nhà nước. Nội dung do mô hình ngôn ngữ tổng hợp từ kho văn bản đã số
-    hoá, dùng để tham khảo và học tập, không thay thế ý kiến của người hành nghề
-    luật. Luôn đối chiếu với bản gốc trước khi sử dụng.</p>
-</footer>
-
-<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
-<script src="/history.js"></script>
-<script src="/app.js"></script>
-<script src="/field.js"></script>
-</body>
+    <div class="scene-shade" aria-hidden="true"></div>
+    <aside class="sidebar" id="sidebar" aria-label="Lịch sử tra cứu" inert>
+      <div class="side-head">
+        <a class="brand" href="/" aria-label="H2N LAW, trang chủ"
+          ><span class="mark" aria-hidden="true">H</span
+          ><span class="wordmark">H2N LAW</span></a
+        ><button
+          type="button"
+          id="close-sidebar"
+          class="icon-button"
+          aria-label="Đóng thanh bên"
+        >
+          ×
+        </button>
+      </div>
+      <button type="button" id="new-chat" class="newchat">
+        <span aria-hidden="true">＋</span> Cuộc trò chuyện mới
+      </button>
+      <label class="history-search"
+        ><span aria-hidden="true">⌕</span
+        ><input
+          id="history-filter"
+          type="search"
+          placeholder="Tìm cuộc trò chuyện"
+          aria-label="Tìm cuộc trò chuyện"
+      /></label>
+      <div class="history-label">Cuộc trò chuyện gần đây</div>
+      <nav
+        class="chatlist"
+        id="chat-list"
+        aria-label="Cuộc trò chuyện gần đây"
+      ></nav>
+      <div class="side-foot">
+        <div class="library-label">
+          <span aria-hidden="true">§</span
+          ><span
+            >Kho pháp luật Việt Nam<small
+              ><b id="corpus-count">Chưa tải</b> điều luật</small
+            ></span
+          >
+        </div>
+        <p id="corpus-freshness" class="freshness">Đang tải thông tin kho…</p>
+        <button type="button" id="clear-chats" class="clearchats">
+          Xoá toàn bộ lịch sử
+        </button>
+        <div class="side-profile">
+          <span class="avatar">H</span
+          ><span
+            >Không gian cá nhân<small>Lưu trên trình duyệt này</small></span
+          >
+        </div>
+      </div>
+    </aside>
+    <div class="scrim" id="scrim" hidden></div>
+    <div class="workspace">
+      <header class="topbar">
+        <div class="header-left">
+          <button
+            type="button"
+            id="side-toggle"
+            class="icon-button menu-button"
+            aria-label="Mở lịch sử tra cứu"
+            aria-controls="sidebar"
+            aria-expanded="false"
+          >
+            ☰</button
+          ><a class="header-brand" href="/">H2N LAW</a
+          ><span class="header-divider"></span
+          ><span class="header-caption">Trợ lý pháp luật của bạn</span>
+        </div>
+        <div class="header-actions">
+          <button
+            type="button"
+            id="scene-reset"
+            class="motion-toggle"
+            disabled
+            title="Đưa nền về góc nhìn ban đầu"
+            aria-label="Đặt lại góc nhìn nền"
+          >
+            Đặt lại góc <span aria-hidden="true">↺</span>
+          </button>
+          <button
+            type="button"
+            id="motion-toggle"
+            class="motion-toggle"
+            aria-pressed="true"
+            title="Bật hoặc tắt chuyển động nền"
+          >
+            Tự xoay 360° <span aria-hidden="true">◉</span></button
+          ><span class="mode" role="group" aria-label="Chế độ màu"
+            ><button type="button" data-set="light" aria-pressed="false">
+              Sáng</button
+            ><button type="button" data-set="dark" aria-pressed="true">
+              Tối
+            </button></span
+          >
+        </div>
+      </header>
+      <main class="chat-main" id="main-content">
+        <section id="state-rest" class="welcome">
+          <p class="eyebrow">A clearer perspective on law</p>
+          <h1>Hiểu luật.<br /><em>Vững bước.</em></h1>
+          <p class="welcome-description">
+            Mọi câu hỏi đều xứng đáng có căn cứ.<br />Cùng tìm điều luật dành
+            cho tình huống của bạn.
+          </p>
+        </section>
+        <section id="state-thread" aria-label="Cuộc hội thoại" hidden>
+          <div class="thread" id="thread"></div>
+        </section>
+        <div class="composer-area">
+          <button class="backbtn" id="back-btn" type="button">
+            ← Quay lại trang chủ
+          </button>
+          <form class="searchbar" id="ask-form" role="search">
+            <label class="sr-only" for="q-input">Câu hỏi pháp luật</label
+            ><textarea
+              id="q-input"
+              rows="2"
+              autocomplete="off"
+              aria-label="Câu hỏi pháp luật"
+              placeholder="Bạn muốn hiểu điều gì về pháp luật?"
+              maxlength="1000"
+              required
+            ></textarea>
+            <div class="composer-bottom">
+              <span class="composer-scope"
+                ><span class="scope-symbol" aria-hidden="true">§</span> Pháp
+                luật Việt Nam
+                <span class="source-label">Có dẫn nguồn</span></span
+              ><button type="submit" id="ask-btn" aria-label="Gửi câu hỏi">
+                <span class="send-label">Tra cứu</span
+                ><span aria-hidden="true">↑</span>
+              </button>
+            </div>
+          </form>
+          <p class="err" id="ask-err" role="alert" hidden></p>
+          <div class="restextra">
+            <p class="suggest-label">Bắt đầu từ một điều bạn quan tâm</p>
+            <div class="qchips" id="qchips">
+              <button
+                class="qchip"
+                type="button"
+                data-question="Di chúc hợp lệ cần những điều kiện gì?"
+              >
+                <span>§</span> Dân sự &amp; đời sống</button
+              ><button
+                class="qchip"
+                type="button"
+                data-question="Người lao động nghỉ việc cần báo trước bao nhiêu ngày?"
+              >
+                <span>↗</span> Lao động</button
+              ><button
+                class="qchip"
+                type="button"
+                data-question="Tuổi kết hôn tối thiểu là bao nhiêu?"
+              >
+                <span>♡</span> Hôn nhân &amp; gia đình</button
+              ><button
+                class="qchip"
+                type="button"
+                data-question="Nồng độ cồn khi lái xe bị phạt như thế nào?"
+              >
+                <span>⇄</span> Giao thông
+              </button>
+            </div>
+          </div>
+          <p class="composer-note">
+            H2N LAW có thể mắc lỗi. Luôn đối chiếu điều luật gốc trước khi sử
+            dụng.
+          </p>
+        </div>
+      </main>
+      <footer class="foot">
+        <div class="panorama-controls">
+          <label
+            for="panorama-angle"
+            title="Kéo vùng nền trống hoặc dùng thanh trượt để xoay đủ 360°"
+            >Xoay 360°</label
+          ><input
+            type="range"
+            id="panorama-angle"
+            min="0"
+            max="360"
+            step="1"
+            value="0"
+            disabled
+            aria-label="Góc xoay nền 360 độ"
+          /><output id="panorama-angle-value" for="panorama-angle">0°</output>
+        </div>
+        <button type="button" id="about-open">
+          Thông tin &amp; lưu ý <span aria-hidden="true">↗</span>
+        </button>
+      </footer>
+    </div>
+    <dialog id="about-dialog" aria-labelledby="about-title">
+      <div class="dialog-heading">
+        <h2 id="about-title">Về H2N LAW</h2>
+        <button
+          type="button"
+          id="about-close"
+          class="icon-button"
+          aria-label="Đóng thông tin"
+        >
+          ×
+        </button>
+      </div>
+      <p>
+        <b>Đồ án môn Xử lý ngôn ngữ tự nhiên.</b> Đây không phải cổng thông tin
+        của cơ quan nhà nước. Nội dung do mô hình ngôn ngữ tổng hợp từ kho văn
+        bản đã số hoá, dùng để tham khảo và học tập, không thay thế ý kiến của
+        người hành nghề luật. Luôn đối chiếu với bản gốc trước khi sử dụng.
+      </p>
+      <p>
+        Lịch sử được lưu trên trình duyệt này. Khi tra cứu, câu hỏi và ngữ cảnh
+        hội thoại gần nhất được gửi đến máy chủ để xử lý.
+      </p>
+      <p class="depth-explanation">
+        Nền là toàn cảnh 360° được AI tạo dựa trên ảnh thư viện luật bạn chọn.
+        Các góc khuất được tạo thêm, không phải ảnh chụp thật của căn phòng gốc.
+        Kéo vùng nền trống hoặc dùng thanh trượt để nhìn quanh. Bạn có thể tắt
+        tự xoay bất cứ lúc nào.
+      </p>
+    </dialog>
+    <script src="/history.js"></script>
+    <script src="/app.js"></script>
+    <script src="/vendor/pannellum/pannellum.js"></script>
+    <script src="/scene.js"></script>
+  </body>
 </html>

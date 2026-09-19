@@ -8,6 +8,13 @@ docs/superpowers/
 # Kho vector và cache crawl: sinh lại được, và nặng hàng trăm MB
 data/
 
+# Ảnh gốc người dùng đưa vào, bản dùng thật là web/assets/background.jpg
+back_ground.jpg
+
+# Nhánh 2.5D đã bỏ: bản đồ độ sâu và script sinh nó không phục vụ bản chạy
+web/assets/background-depth.png
+scripts/build_background_depth.py
+
 # Python
 .venv/
 __pycache__/
