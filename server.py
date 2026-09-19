@@ -304,4 +304,26 @@ def ask_stream(req: AskRequest, pipeline=Depends(get_pipeline)):
                              headers=SSE_HEADERS)
 
 
-app.mount("/", StaticFiles(directory="web", html=True), name="web")
+class KhongCache(StaticFiles):
+    """Buộc trình duyệt hỏi lại máy chủ trước khi dùng lại file tĩnh.
+
+    Vì sao bắt buộc: Starlette chỉ gửi ETag và Last-Modified, không gửi
+    Cache-Control. Thiếu Cache-Control thì trình duyệt TỰ SUY ĐOÁN thời hạn lưu
+    (thường lấy 10% khoảng thời gian từ Last-Modified) và dùng lại bản cũ mà
+    không hỏi lại. Hậu quả đã gặp thật sau khi deploy bản giao diện mới: người
+    dùng nhận index.html MỚI nhưng style.css và app.js CŨ - CSS cũ không có
+    luật nào cho thanh lịch sử nên nó đổ thành chữ trần, còn app.js cũ đi tìm
+    phần tử đã đổi tên nên hỏng ngay, màn hình chủ không chịu ẩn. Trang trông
+    như bị vỡ hoàn toàn dù máy chủ phục vụ đúng file.
+
+    "no-cache" KHÔNG phải là cấm lưu: trình duyệt vẫn giữ file, chỉ phải hỏi
+    lại. Có ETag nên lần hỏi lại trả 304 rỗng, gần như không tốn gì.
+    """
+
+    def file_response(self, *args, **kwargs):
+        res = super().file_response(*args, **kwargs)
+        res.headers["Cache-Control"] = "no-cache"
+        return res
+
+
+app.mount("/", KhongCache(directory="web", html=True), name="web")

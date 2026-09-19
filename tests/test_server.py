@@ -308,3 +308,13 @@ def test_viet_lai_cau_noi_tiep_TRUOC_roi_moi_noi_thuat_ngu(client):
     # Không có hàm viết lại nên lui về ghép chuỗi; chuỗi ghép chứa "vượt đèn
     # đỏ" nên từ điển bắt được và nối thuật ngữ vào.
     assert "không chấp hành hiệu lệnh của đèn tín hiệu giao thông" in fake.seen_query
+
+
+def test_file_tinh_co_cache_control_no_cache(client):
+    """Thiếu Cache-Control thì trình duyệt tự suy đoán thời hạn và dùng lại bản
+    cũ. Đã gặp thật: index.html mới + style.css/app.js cũ = trang vỡ hoàn toàn.
+    """
+    for duong in ("/index.html", "/style.css", "/app.js"):
+        r = client.get(duong)
+        assert r.status_code == 200, duong
+        assert r.headers.get("cache-control") == "no-cache", duong
