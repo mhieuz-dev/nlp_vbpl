@@ -15,6 +15,7 @@ from src.generation.generator import Generator, fit_to_context
 from src.ingestion.corpus_meta import read_meta
 from src.vectorstore.bootstrap import ensure_corpus
 from src.pipeline.followup import retrieval_query
+from src.pipeline.synonyms import expand_query
 from src.pipeline.rag import RAGPipeline
 from src.vectorstore.store import VectorStore
 
@@ -180,8 +181,12 @@ def run_query_events(pipeline, question: str, history=None):
     t0 = time.perf_counter()
     # Câu đem đi TÌM khác câu gửi cho model ĐỌC: câu nối tiếp kiểu "còn ô tô
     # thì sao" tự nó không đủ nghĩa để nhúng, phải ghép câu hỏi trước vào.
+    # Hai bước, đúng thứ tự này: làm câu hỏi đủ nghĩa trước (câu nối tiếp cần
+    # ngữ cảnh), rồi mới nối thuật ngữ luật vào. Đổi thứ tự thì câu cụt kiểu
+    # "còn ô tô thì sao?" chưa có chữ nào để từ điển bắt.
     truy_van = retrieval_query(question, history,
                                condense=getattr(pipeline.generator, "condense", None))
+    truy_van = expand_query(truy_van)
     chunks = pipeline.store.query(truy_van, top_k=pipeline.top_k)
     # Cắt cho vừa trần ngữ cảnh TRƯỚC khi đánh số, để số nguồn model thấy khớp
     # với số nguồn hiển thị trên giao diện.

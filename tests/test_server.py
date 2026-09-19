@@ -253,7 +253,8 @@ def test_ask_ghep_cau_hoi_truoc_vao_truy_van_khi_hoi_noi_tiep(client):
     client.post("/api/ask", json={
         "question": "còn ô tô thì sao?",
         "history": [{"role": "user", "content": "Vượt đèn đỏ phạt bao nhiêu?"}]})
-    assert fake.seen_query == "Vượt đèn đỏ phạt bao nhiêu? còn ô tô thì sao?"
+    # startswith chứ không bằng: sau bước ghép còn một bước nối thuật ngữ luật.
+    assert fake.seen_query.startswith("Vượt đèn đỏ phạt bao nhiêu? còn ô tô thì sao?")
 
 
 def test_ask_khong_co_lich_su_thi_truy_van_giu_nguyen(client):
@@ -287,3 +288,23 @@ def test_stream_cung_nhan_lich_su(client):
         "history": [{"role": "user", "content": "Vượt đèn đỏ phạt bao nhiêu?"}]})
     assert r.status_code == 200
     assert "event: done" in r.text
+
+
+def test_ask_noi_thuat_ngu_luat_vao_truy_van(client):
+    """Câu đem đi tìm được nối thuật ngữ luật, câu gửi model đọc thì không."""
+    fake = FakePipeline()
+    app.dependency_overrides[get_pipeline] = lambda: fake
+    client.post("/api/ask", json={"question": "Ô tô vượt đèn đỏ phạt bao nhiêu?"})
+    assert "không chấp hành hiệu lệnh của đèn tín hiệu giao thông" in fake.seen_query
+
+
+def test_viet_lai_cau_noi_tiep_TRUOC_roi_moi_noi_thuat_ngu(client):
+    """Đổi thứ tự thì câu cụt chưa có chữ nào để từ điển bắt."""
+    fake = FakePipeline()
+    app.dependency_overrides[get_pipeline] = lambda: fake
+    client.post("/api/ask", json={
+        "question": "còn ô tô thì sao?",
+        "history": [{"role": "user", "content": "Xe máy vượt đèn đỏ phạt bao nhiêu?"}]})
+    # Không có hàm viết lại nên lui về ghép chuỗi; chuỗi ghép chứa "vượt đèn
+    # đỏ" nên từ điển bắt được và nối thuật ngữ vào.
+    assert "không chấp hành hiệu lệnh của đèn tín hiệu giao thông" in fake.seen_query

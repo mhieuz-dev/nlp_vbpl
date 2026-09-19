@@ -64,3 +64,74 @@ RETRIEVAL_QUESTIONS = [
     {"question": "Thời hiệu khởi kiện vụ án dân sự tại toà án được tính thế nào?",
      "expected": [("bo luat to tung dan su", 184)]},
 ]
+
+
+# Khoá tên nghị định: `_norm` bỏ hết chữ số nên "168/2024" biến mất, không dùng
+# số hiệu làm khoá được. Cụm chữ dưới đây đã kiểm là nằm trong tên văn bản.
+_ND_GIAO_THONG = "xu phat vi pham hanh chinh ve trat tu"
+
+# Bộ câu hỏi LỜI NÓI ĐỜI THƯỜNG.
+#
+# Vì sao cần bộ riêng: bộ 22 câu ở trên phần lớn đã dùng sẵn từ ngữ gần với văn
+# phong luật, nên nó không đo được điểm yếu thật sự phát hiện ngày 19/09/2026 -
+# người ta hỏi "vượt đèn đỏ" trong khi luật viết "không chấp hành hiệu lệnh của
+# đèn tín hiệu giao thông", và chunk đúng rơi xuống hạng 13, ngoài top-10.
+#
+# Mọi cặp (luật, điều) dưới đây đều tra thẳng từ `data/chroma_db` bằng tiêu đề
+# điều luật, không viết theo trí nhớ. Câu hỏi thì cố ý viết bằng lời người
+# thường hỏi, KHÔNG mượn từ ngữ của điều luật - nếu mượn thì bộ đánh giá tự làm
+# bài dễ đi và con số đo được sẽ nói dối.
+COLLOQUIAL_QUESTIONS = [
+    # --- giao thông: khoảng cách từ vựng lớn nhất ---
+    {"question": "Ô tô vượt đèn đỏ bị phạt bao nhiêu tiền?",
+     "expected": [(_ND_GIAO_THONG, 6)]},
+    {"question": "Xe máy vượt đèn đỏ phạt bao nhiêu?",
+     "expected": [(_ND_GIAO_THONG, 7)]},
+    {"question": "Đi xe máy không đội mũ bảo hiểm bị phạt nhiêu tiền?",
+     "expected": [(_ND_GIAO_THONG, 7)]},
+    {"question": "Uống rượu bia lái ô tô bị phạt thế nào?",
+     "expected": [(_ND_GIAO_THONG, 6)]},
+    {"question": "Nhậu xong chạy xe máy bị phạt bao nhiêu?",
+     "expected": [(_ND_GIAO_THONG, 7)]},
+    {"question": "Ô tô chạy quá tốc độ trên 35 km/h phạt bao nhiêu?",
+     "expected": [(_ND_GIAO_THONG, 6)]},
+
+    # --- lao động ---
+    {"question": "Một năm được nghỉ phép mấy ngày?",
+     "expected": [("bo luat lao dong", 113)]},
+    {"question": "Tăng ca thì được trả thêm bao nhiêu phần trăm lương?",
+     "expected": [("bo luat lao dong", 98)]},
+    {"question": "Công ty đuổi việc nhân viên trong trường hợp nào?",
+     "expected": [("bo luat lao dong", 125)]},
+    {"question": "Thử việc được bao lâu thì phải ký hợp đồng chính thức?",
+     "expected": [("bo luat lao dong", 25)]},
+    {"question": "Lương thử việc thấp nhất là bao nhiêu?",
+     "expected": [("bo luat lao dong", 26)]},
+
+    # --- hôn nhân gia đình ---
+    {"question": "Ly hôn thì chia tài sản ra sao?",
+     "expected": [("luat hon nhan va gia dinh", 59)]},
+    {"question": "Bỏ nhau rồi ai được quyền nuôi con?",
+     "expected": [("luat hon nhan va gia dinh", 81)]},
+
+    # --- hình sự: tên tội danh đời thường khác hẳn tên tội danh trong luật ---
+    {"question": "Ăn trộm đồ thì bị tội gì?",
+     "expected": [("bo luat hinh su", 173)]},
+    {"question": "Đánh người gây thương tích bị xử lý thế nào?",
+     "expected": [("bo luat hinh su", 134)]},
+    {"question": "Lừa tiền người khác bị phạt tù bao nhiêu năm?",
+     "expected": [("bo luat hinh su", 174)]},
+    {"question": "Trốn thuế bao nhiêu thì bị đi tù?",
+     "expected": [("bo luat hinh su", 200)]},
+
+    # --- dân sự ---
+    {"question": "Cho vay lãi bao nhiêu thì bị coi là cho vay nặng lãi?",
+     "expected": [("bo luat dan su", 468)]},
+    {"question": "Đặt cọc mua nhà rồi đổi ý thì có mất cọc không?",
+     "expected": [("bo luat dan su", 328)]},
+    {"question": "Làm hư đồ của người khác thì phải đền không?",
+     "expected": [("bo luat dan su", 584)]},
+]
+
+# Dùng khi muốn một con số chung cho cả hai loại câu hỏi.
+ALL_QUESTIONS = RETRIEVAL_QUESTIONS + COLLOQUIAL_QUESTIONS
