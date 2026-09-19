@@ -36,5 +36,4 @@ requests==2.34.2
 #   gradio       - tàn dư của đường HuggingFace Spaces đã bỏ
 #   datasets     - chỉ dùng lúc nạp kho lần đầu
 #   ragas        - chỉ dùng lúc đánh giá
-#   scikit-learn - chỉ scripts/export_vector_map.py dùng, chạy offline
 #   pytest       - không chạy test trên bản deploy

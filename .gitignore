@@ -7,8 +7,6 @@ docs/superpowers/
 
 # Kho vector và cache crawl: sinh lại được, và nặng hàng trăm MB
 data/
-web/vector_map.bin
-web/vector_map.json
 
 # Python
 .venv/
