@@ -1,12 +1,12 @@
-datasets>=2.20.0
-sentence-transformers>=3.0.0
-chromadb>=0.5.0
-openai>=1.100.0
-ragas>=0.1.0
-python-dotenv>=1.0.0
-pytest>=8.0.0
-underthesea>=6.8.0
-fastapi>=0.110.0
-uvicorn>=0.29.0
-pymupdf>=1.24.0
-requests>=2.31.0
+# Môi trường ở máy: đúng bộ phiên bản của bản deploy (torch CPU, ghim chính
+# xác - lý do ghi trong requirements-deploy.txt) cộng vài gói chỉ dùng lúc
+# phát triển. Dùng torch CPU cả ở máy vì GPU chỉ tiết kiệm 25 ms trên 2,3 giây
+# mỗi câu hỏi, mà venv CUDA nặng 5,9 GB so với 1,6 GB.
+#
+#   uv venv .venv --python 3.10
+#   uv pip install -r requirements.txt --index-strategy unsafe-best-match
+-r requirements-deploy.txt
+
+pytest==9.1.1
+pymupdf==1.28.2   # crawler Công báo bóc PDF (src/ingestion/congbao.py)
+datasets==5.0.1   # nạp kho lần đầu từ HuggingFace (src/ingestion/loader.py)
