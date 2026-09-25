@@ -5,12 +5,14 @@ tóm tắt chung chung. Đồ án môn Xử lý ngôn ngữ tự nhiên, UEH.
 
 ## Cách hoạt động
 
-Câu hỏi được nhúng bằng `multilingual-e5-base`, tra trong ChromaDB (cosine HNSW)
-lấy top-10 điều luật, rồi mô hình sinh viết câu trả lời **chỉ dựa trên** những
-điều luật đó. Nếu kho không chứa câu trả lời, hệ thống **từ chối trả lời** thay
+Câu hỏi được nối thêm thuật ngữ pháp lý khi viết bằng lời đời thường ("vượt đèn
+đỏ" -> "không chấp hành hiệu lệnh của đèn tín hiệu giao thông"), nhúng bằng
+`multilingual-e5-base`, tra trong ChromaDB (cosine HNSW) lấy top-15 đoạn luật và
+cắt cho vừa trần 16.000 ký tự, rồi mô hình sinh viết câu trả lời **chỉ dựa trên**
+những đoạn đó. Câu hỏi nêu đích danh "Điều N" được tra thẳng theo số điều. Nếu kho không chứa câu trả lời, hệ thống **từ chối trả lời** thay
 vì ghép các điều gần chủ đề lại cho nghe xuôi tai.
 
-Kho hiện có **49.063 điều** từ **624 văn bản**: luật, bộ luật, hiến pháp và nghị
+Kho hiện có **49.063 đoạn** (một Điều dài bị chia nhiều đoạn) từ **624 văn bản**: luật, bộ luật, hiến pháp và nghị
 định. Phần nghị định được crawl từ [Công báo điện tử](https://congbao.chinhphu.vn)
 (`robots.txt` cho phép), cập nhật hàng ngày qua GitHub Actions.
 
@@ -35,8 +37,17 @@ python scripts/refresh_corpus.py --sweep 43550 43960 --types decree
 
 ## Đo chất lượng
 
-`evaluation/retrieval_eval.py` chấm trên 22 câu hỏi có đáp án đã kiểm chứng
-(luật nào, điều số mấy). Kết quả hiện tại: **Recall@5 0,864 · MRR 0,712 ·
-Recall@10 0,955**.
+`python -m evaluation.retrieval_eval` chấm truy xuất trên 42 câu hỏi có đáp án đã
+kiểm chứng trong kho (22 câu văn phong gần luật + 20 câu lời đời thường), đi qua
+đúng đường truy xuất của app. Một câu tính là trúng khi lấy được đúng phiên bản
+văn bản, đúng Điều, và với nghị định giao thông là đúng đoạn chứa khoản có đáp án.
+
+| Từ điển thuật ngữ | Recall@5 | Recall@10 | MRR@15 | Nguồn đúng còn trong context |
+|---|---|---|---|---|
+| tắt | 0,738 | 0,857 | 0,584 | 0,905 |
+| **bật (app đang dùng)** | **0,881** | **0,976** | **0,701** | **0,976** |
+
+Riêng 20 câu lời đời thường, Recall@5 tăng từ 0,60 lên 0,90. Câu còn trượt: "Muốn
+hợp đồng có giá trị pháp lý thì cần điều kiện gì?" (Điều 117 BLDS ngoài top-15).
 
 Ghi chép quá trình, các hướng đã thử và đã loại nằm trong `memory.md`.
