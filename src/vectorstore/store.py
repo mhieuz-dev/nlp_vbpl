@@ -73,6 +73,7 @@ class VectorStore:
         m = _DIEU_RE.match(doc)
         return {
             "chunk_id": cid,
+            "doc_id": meta.get("doc_id", ""),
             "article": int(m.group(1)) if m else None,
             "text": doc,
             "title": meta["title"],

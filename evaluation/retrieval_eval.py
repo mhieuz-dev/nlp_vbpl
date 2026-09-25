@@ -12,27 +12,34 @@ from src.generation.generator import fit_to_context
 
 
 def _norm(text: str) -> str:
-    """Bỏ dấu tiếng Việt và chữ số để so tên luật bất kể cách viết."""
+    """Bỏ dấu, gộp mọi ký tự không phải chữ-số thành một khoảng trắng.
+
+    Giữ chữ số: đoạn bằng chứng là mức phạt ("18.000.000 đồng"), bỏ số đi thì
+    khoản 7 và khoản 9 không còn phân biệt được.
+    """
     t = text.lower().replace("đ", "d")
     t = unicodedata.normalize("NFD", t)
     t = "".join(c for c in t if unicodedata.category(c) != "Mn")
-    return re.sub(r"\d+", " ", t)
+    return re.sub(r"[^a-z0-9]+", " ", t).strip()
 
 
-def chunk_matches(chunk: dict, expected: tuple) -> bool:
-    """Chunk có đúng là điều luật cần tìm không.
+def chunk_matches(chunk: dict, expected: tuple, evidence: bool = True) -> bool:
+    """Chunk có đúng là nguồn cần tìm không.
 
-    `expected` là (khoá tên luật đã bỏ dấu, số điều). Khoá tên luật so bằng
-    phép chứa vì cùng một bộ luật xuất hiện trong kho dưới nhiều cách viết:
-    "Bộ Luật dân sự", "Bo Luat Dan Su", "Bo luat dan su 2015 296215".
+    `expected` là (tập doc_id hợp lệ, số điều[, đoạn bằng chứng]). evidence=False
+    chỉ chấm tới mức Điều, để so với cách chấm cũ.
     """
-    law_key, article = expected
-    if chunk.get("article") != article:
+    docs, article, *rest = expected
+    if chunk.get("article") != article or chunk.get("doc_id") not in docs:
         return False
-    return _norm(law_key).strip() in _norm(chunk.get("title", ""))
+    if not evidence or not rest:
+        return True
+    text = _norm(chunk.get("text", ""))
+    return all(_norm(e) in text for e in rest[0])
 
 
-def evaluate_retrieval(pipeline, questions: list[dict], ks=(5, 10, 15)) -> dict:
+def evaluate_retrieval(pipeline, questions: list[dict], ks=(5, 10, 15),
+                       evidence: bool = True) -> dict:
     """Đo truy xuất qua đúng đường app chạy: pipeline.retrieve().
 
     Trước đây hàm này gọi thẳng store.query(), nên bỏ qua bước nối thuật ngữ
@@ -42,22 +49,22 @@ def evaluate_retrieval(pipeline, questions: list[dict], ks=(5, 10, 15)) -> dict:
 
     in_context: nguồn đúng còn sống sau fit_to_context (trần 16.000 ký tự),
     tức model thật sự được đọc nó. Lọt top-15 mà bị cắt thì model vẫn không thấy.
+    Chấm lại trên bản ĐÃ CẮT, nên chunk bị cắt cụt mất đoạn bằng chứng cũng tính
+    là không có trong context.
     """
+    def dung(c):
+        return any(chunk_matches(c, exp, evidence) for exp in item["expected"])
+
     per_question = []
     for item in questions:
         raw = pipeline.retrieve(item["question"], fit=False)
         kept = fit_to_context(raw)
-        rank = next((i for i, c in enumerate(raw, start=1)
-                     if any(chunk_matches(c, exp) for exp in item["expected"])), None)
+        rank = next((i for i, c in enumerate(raw, start=1) if dung(c)), None)
         per_question.append({
             "question": item["question"],
             "query": pipeline.search_query(item["question"]),
             "rank": rank,
-            "in_context": rank is not None and rank <= len(kept),
-            # Chunk đầu bảng dài quá trần bị cắt cụt chứ không bị bỏ: vẫn tính
-            # là trong ngữ cảnh, nhưng đoạn chứa đáp án có thể đã rơi mất.
-            "truncated": rank is not None and rank <= len(kept)
-                         and len(kept[rank - 1]["text"]) < len(raw[rank - 1]["text"]),
+            "in_context": any(dung(c) for c in kept),
         })
 
     n = len(questions)
@@ -102,12 +109,17 @@ def main():
                 sai = [q for q in m["per_question"]
                        if q["rank"] is None or q["rank"] > 5 or not q["in_context"]]
 
+    print("Chấm theo phiên bản văn bản + Điều + đoạn bằng chứng:\n")
     print(_bang(rows))
+    print("\nCùng lượt truy xuất, chấm lỏng tới mức Điều (bỏ đoạn bằng chứng):\n")
+    pipe = RAGPipeline(store=store, generator=None, expand_terms=True)
+    print(_bang([(ten, True, evaluate_retrieval(pipe, qs, evidence=False))
+                 for ten, qs in bo_cau]))
     print("\nCâu còn yếu khi bật từ điển (ngoài top-5 hoặc không vào được context):")
     for q in sai:
         hang = q["rank"] if q["rank"] else "ngoài top-15"
         print(f"- hạng {hang}, context {'có' if q['in_context'] else 'KHÔNG'}"
-              f"{', bị cắt cụt' if q['truncated'] else ''}: {q['question']}")
+              f": {q['question']}")
 
 
 if __name__ == "__main__":
