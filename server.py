@@ -11,13 +11,10 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from src.embeddings.embedder import Embedder
-from src.generation.generator import Generator, fit_to_context
+from src.generation.generator import Generator
 from src.ingestion.corpus_meta import read_meta
 from src.vectorstore.bootstrap import ensure_corpus
-from src.pipeline.followup import retrieval_query
-from src.pipeline.synonyms import expand_query
-from src.pipeline.rag import RAGPipeline
-from src.vectorstore.store import VectorStore
+from src.pipeline.rag import RAGPipeline, build_store
 
 load_dotenv()
 
@@ -42,11 +39,7 @@ _lock = threading.Lock()
 def _build_pipeline() -> RAGPipeline:
     """Dựng pipeline thật. Chỉ gọi trong _warm_load hoặc get_pipeline, dưới _lock."""
     ensure_corpus()
-    embedder = Embedder()
-    # article_lookup: câu hỏi nêu đích danh "Điều N" thì dense gần như không tìm
-    # được (đo thật: Điều 630 không lọt cả top-30). Bật lên, Recall@5 0.773 ->
-    # 0.864, MRR 0.551 -> 0.712.
-    store = VectorStore(embedder=embedder, article_lookup=True)
+    store = build_store(Embedder())
     # Phạm vi kho lấy từ corpus_meta.json (do refresh_corpus.py ghi) chứ không
     # quét lại 49.063 chunk lúc khởi động. Chưa có file thì scope_paragraph()
     # im lặng, không đưa ra khẳng định nào.
@@ -179,18 +172,8 @@ def run_query_events(pipeline, question: str, history=None):
     Sự kiện cuối luôn là ("done", payload) — payload giống hệt POST /api/ask.
     """
     t0 = time.perf_counter()
-    # Câu đem đi TÌM khác câu gửi cho model ĐỌC: câu nối tiếp kiểu "còn ô tô
-    # thì sao" tự nó không đủ nghĩa để nhúng, phải ghép câu hỏi trước vào.
-    # Hai bước, đúng thứ tự này: làm câu hỏi đủ nghĩa trước (câu nối tiếp cần
-    # ngữ cảnh), rồi mới nối thuật ngữ luật vào. Đổi thứ tự thì câu cụt kiểu
-    # "còn ô tô thì sao?" chưa có chữ nào để từ điển bắt.
-    truy_van = retrieval_query(question, history,
-                               condense=getattr(pipeline.generator, "condense", None))
-    truy_van = expand_query(truy_van)
-    chunks = pipeline.store.query(truy_van, top_k=pipeline.top_k)
-    # Cắt cho vừa trần ngữ cảnh TRƯỚC khi đánh số, để số nguồn model thấy khớp
-    # với số nguồn hiển thị trên giao diện.
-    chunks = fit_to_context(chunks)
+    # Cùng một đường truy xuất với bộ đánh giá, để số đo nói đúng về app.
+    chunks = pipeline.retrieve(question, history)
     t1 = time.perf_counter()
     retrieve_ms = int((t1 - t0) * 1000)
     yield "step", {"step": "retrieve", "ms": retrieve_ms, "found": len(chunks)}

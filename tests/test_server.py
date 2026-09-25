@@ -2,13 +2,15 @@ import pytest
 from fastapi.testclient import TestClient
 
 from server import app, get_pipeline
+from src.pipeline.rag import RAGPipeline
 
 
-class FakePipeline:
-    top_k = 5
+class FakePipeline(RAGPipeline):
+    """Pipeline thật, chỉ thay kho và model: server đi đúng đường retrieve() của app."""
     model_name = "fake-model"
 
     def __init__(self, chunks=None, answer="Trả lời [1].", raises=None, answered=True):
+        super().__init__(store=self, generator=self, top_k=5)
         self._chunks = chunks if chunks is not None else [{
             "chunk_id": "0_1", "article": 122, "text": "Điều 122. Giao dịch vô hiệu.",
             "title": "Bộ luật Dân sự 2015", "law_type": "bo_luat", "score": 0.9127,
@@ -16,8 +18,6 @@ class FakePipeline:
         self._answer = answer
         self._raises = raises
         self._answered = answered
-        self.store = self
-        self.generator = self
 
     def query(self, question, top_k=5):
         self.seen_query = question      # để test soi câu thật sự đem đi tìm
