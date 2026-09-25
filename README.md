@@ -1,4 +1,4 @@
-# luật.ai - hỏi đáp văn bản quy phạm pháp luật Việt Nam
+# H2N LAW - hỏi đáp văn bản quy phạm pháp luật Việt Nam
 
 Hệ thống RAG trả lời câu hỏi pháp luật và **dẫn về đúng điều khoản gốc**, thay vì
 tóm tắt chung chung. Đồ án môn Xử lý ngôn ngữ tự nhiên, UEH.
@@ -9,12 +9,14 @@ Câu hỏi được nối thêm thuật ngữ pháp lý khi viết bằng lời 
 đỏ" -> "không chấp hành hiệu lệnh của đèn tín hiệu giao thông"), nhúng bằng
 `multilingual-e5-base`, tra trong ChromaDB (cosine HNSW) lấy top-15 đoạn luật và
 cắt cho vừa trần 16.000 ký tự, rồi mô hình sinh viết câu trả lời **chỉ dựa trên**
-những đoạn đó. Câu hỏi nêu đích danh "Điều N" được tra thẳng theo số điều. Nếu kho không chứa câu trả lời, hệ thống **từ chối trả lời** thay
-vì ghép các điều gần chủ đề lại cho nghe xuôi tai.
+những đoạn đó. Câu hỏi nêu đích danh "Điều N" được tra thẳng theo số điều. Nếu
+kho không chứa câu trả lời, hệ thống **từ chối trả lời** thay vì ghép các điều
+gần chủ đề lại cho nghe xuôi tai.
 
-Kho hiện có **49.063 đoạn** (một Điều dài bị chia nhiều đoạn) từ **624 văn bản**: luật, bộ luật, hiến pháp và nghị
-định. Phần nghị định được crawl từ [Công báo điện tử](https://congbao.chinhphu.vn)
-(`robots.txt` cho phép), cập nhật hàng ngày qua GitHub Actions.
+Kho trên bản deploy (25/09/2026) có **53.338 đoạn** (một Điều dài bị chia nhiều
+đoạn) từ **699 văn bản**: luật, bộ luật, hiến pháp, nghị định, thông tư, nghị
+quyết và quyết định. Văn bản mới được crawl từ [Công báo điện tử](https://congbao.chinhphu.vn)
+(`robots.txt` cho phép) mỗi đêm qua GitHub Actions.
 
 ## Chạy ở máy
 
@@ -41,6 +43,7 @@ python scripts/refresh_corpus.py --sweep 43550 43960 --types decree
 kiểm chứng trong kho (22 câu văn phong gần luật + 20 câu lời đời thường), đi qua
 đúng đường truy xuất của app. Một câu tính là trúng khi lấy được đúng phiên bản
 văn bản, đúng Điều, và với nghị định giao thông là đúng đoạn chứa khoản có đáp án.
+Số dưới đây đo trên bản kho 49.063 đoạn / 624 văn bản.
 
 | Từ điển thuật ngữ | Recall@5 | Recall@10 | MRR@15 | Nguồn đúng còn trong context |
 |---|---|---|---|---|
