@@ -43,12 +43,12 @@ python scripts/refresh_corpus.py --sweep 43550 43960 --types decree
 kiểm chứng trong kho (22 câu văn phong gần luật + 20 câu lời đời thường), đi qua
 đúng đường truy xuất của app. Một câu tính là trúng khi lấy được đúng phiên bản
 văn bản, đúng Điều, và với nghị định giao thông là đúng đoạn chứa khoản có đáp án.
-Số dưới đây đo trên bản kho 49.063 đoạn / 624 văn bản.
+Số dưới đây đo trên kho 53.338 đoạn / 699 văn bản, trùng với bản deploy ngày 25/09/2026.
 
 | Từ điển thuật ngữ | Recall@5 | Recall@10 | MRR@15 | Nguồn đúng còn trong context |
 |---|---|---|---|---|
-| tắt | 0,738 | 0,857 | 0,584 | 0,905 |
-| **bật (app đang dùng)** | **0,881** | **0,976** | **0,701** | **0,976** |
+| tắt | 0,738 | 0,857 | 0,573 | 0,905 |
+| **bật (app đang dùng)** | **0,881** | **0,976** | **0,689** | **0,976** |
 
 Riêng 20 câu lời đời thường, Recall@5 tăng từ 0,60 lên 0,90. Câu còn trượt: "Muốn
 hợp đồng có giá trị pháp lý thì cần điều kiện gì?" (Điều 117 BLDS ngoài top-15).
