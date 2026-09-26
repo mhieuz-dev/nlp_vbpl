@@ -247,6 +247,13 @@ def _is_overloaded(exc: Exception) -> bool:
     return any(k in s for k in ("503", "UNAVAILABLE", "high demand", "overloaded"))
 
 
+def is_rate_limited(exc: Exception) -> bool:
+    """Nhà cung cấp từ chối vì hạn mức (429), theo phút hay theo ngày đều vậy."""
+    s = str(exc)
+    return ("429" in s or "RESOURCE_EXHAUSTED" in s
+            or "quota" in s.lower() or "rate limit" in s.lower())
+
+
 def _rejects_reasoning_effort(exc: Exception) -> bool:
     s = str(exc).lower()
     return "reasoning_effort" in s or "reasoning effort" in s
@@ -341,10 +348,14 @@ class Generator:
             try:
                 answer = _answer_text(self._create(
                     messages, with_reasoning=False, max_tokens=FALLBACK_MAX_TOKENS))
-            except Exception:
+            except Exception as exc:
                 # Thường là 429: hạn mức token mỗi phút của Groq. Không thử
                 # thêm nữa - thử tiếp chỉ đẩy hạn mức xuống sâu hơn cho những
-                # câu hỏi kế tiếp.
+                # câu hỏi kế tiếp. Nhưng cũng không nuốt 429: nuốt thì người
+                # dùng nhận "không tạo được câu trả lời" như một câu trả lời
+                # thật, thay vì được báo chờ vài giây rồi tự hỏi lại.
+                if is_rate_limited(exc):
+                    raise
                 logger.exception("gọi lại không-suy-luận cũng hỏng")
 
         if not answer:

@@ -592,9 +592,12 @@
           } else if (ev === "error") {
             receivedAnswer = true;
             removeTurn(mine);
-            failAsk(d.error);
+            if (d.retry_after)
+              rateLimitThenRetry(question, d.error, d.retry_after);
+            else failAsk(d.error);
           } else if (ev === "done") {
             receivedAnswer = true;
+            rateRetried = null;
             warmSince =
               null; /* trả lời được rồi: quên đồng hồ khởi động cũ đi */
             finishTurn(mine, question, d);
@@ -678,6 +681,28 @@
     warmTimer = setTimeout(function () {
       ask(question);
     }, WARM_RETRY_MS);
+  }
+
+  /* Mô hình báo chạm giới hạn theo phút (Groq đếm token mỗi phút): đếm ngược
+     rồi tự hỏi lại MỘT lần. Lần sau vẫn chạm thì dừng hẳn, tự hỏi tiếp chỉ đốt
+     thêm hạn mức. Câu hỏi nằm lại trong ô nhập suốt lúc chờ; gửi câu khác hay
+     mở cuộc khác thì đồng hồ bị huỷ cùng warmTimer. */
+  var rateRetried = null;
+  function rateLimitThenRetry(question, msg, seconds) {
+    failAsk(msg);
+    if (rateRetried === question) {
+      rateRetried = null;
+      return;
+    }
+    rateRetried = question;
+    var ae = document.getElementById("ask-err");
+    (function tick(left) {
+      if (left <= 0) return ask(question);
+      if (ae) ae.textContent = msg + " Tự thử lại sau " + left + " giây…";
+      warmTimer = setTimeout(function () {
+        tick(left - 1);
+      }, 1000);
+    })(seconds);
   }
 
   document.getElementById("ask-form").addEventListener("submit", function (e) {

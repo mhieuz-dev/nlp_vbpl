@@ -1,5 +1,7 @@
 import json
 import logging
+import math
+import re
 import threading
 import time
 from contextlib import asynccontextmanager
@@ -11,7 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from src.embeddings.embedder import Embedder
-from src.generation.generator import Generator
+from src.generation.generator import Generator, is_rate_limited
 from src.ingestion.corpus_meta import read_meta
 from src.vectorstore.bootstrap import ensure_corpus
 from src.pipeline.rag import RAGPipeline, build_store
@@ -212,18 +214,51 @@ QUOTA_ERROR = (
     "Đã dùng hết hạn mức (quota) gọi mô hình của khoá API. "
     "Thử lại ngay cũng không được cho tới khi hạn mức được cấp lại."
 )
+RATE_LIMIT_ERROR = "Mô hình đang nhận quá nhiều câu hỏi trong một phút."
+
+# Groq đếm token theo từng phút: chờ tối đa 60 giây là hỏi lại được. Chờ lâu
+# hơn nghĩa là chạm hạn mức ngày, tự hỏi lại chỉ đốt thêm lượt gọi.
+AUTO_RETRY_MAX_S = 60
+
+# "Please try again in 7m12.5s" (Groq), "Please retry in 33.5s" (Gemini).
+_WAIT_RE = re.compile(r"(?:try again|retry) in ((?:[\d.]+(?:ms|h|m|s))+)", re.I)
+_WAIT_UNIT_S = {"ms": 0.001, "h": 3600, "m": 60, "s": 1}
 
 
-def _error_message(exc: Exception) -> str:
+def _retry_after_s(exc: Exception) -> float | None:
+    """Số giây nhà cung cấp bảo chờ, None nếu lỗi không nói.
+
+    Ưu tiên header retry-after (SDK OpenAI gắn response vào lỗi), không có thì
+    đọc câu "try again in ..." trong thông điệp.
+    """
+    headers = getattr(getattr(exc, "response", None), "headers", None)
+    try:
+        return float(headers["retry-after"])
+    except (TypeError, KeyError, ValueError):
+        pass
+    m = _WAIT_RE.search(str(exc))
+    if not m:
+        return None
+    return sum(float(v) * _WAIT_UNIT_S[u]
+               for v, u in re.findall(r"([\d.]+)(ms|h|m|s)", m.group(1)))
+
+
+def _error_body(exc: Exception) -> dict:
     """Thông điệp tiếng Việt cho người dùng, không lộ chi tiết nội bộ.
 
-    Hết quota khác hẳn lỗi tạm thời: bảo người dùng "thử lại" là sai vì
-    thử lại không giúp gì cho tới khi hạn mức được cấp lại.
+    Ba loại lỗi, ba lời khác nhau. Giới hạn theo phút kèm retry_after để giao
+    diện đếm ngược rồi tự hỏi lại. Hết hạn mức ngày thì bảo "thử lại" là sai
+    vì thử lại không giúp gì cho tới khi hạn mức được cấp lại.
     """
-    text = str(exc)
-    if "429" in text or "RESOURCE_EXHAUSTED" in text or "quota" in text.lower():
-        return QUOTA_ERROR
-    return GENERIC_ERROR
+    if not is_rate_limited(exc):
+        return {"error": GENERIC_ERROR}
+    wait = _retry_after_s(exc)
+    if wait is not None and wait <= AUTO_RETRY_MAX_S:
+        return {"error": RATE_LIMIT_ERROR, "retry_after": math.ceil(wait)}
+    if wait is not None:
+        return {"error": QUOTA_ERROR + f" Dự kiến được cấp lại sau khoảng "
+                                       f"{math.ceil(wait / 60)} phút."}
+    return {"error": QUOTA_ERROR}
 
 
 @app.post("/api/ask")
@@ -237,7 +272,7 @@ def ask(req: AskRequest, pipeline=Depends(get_pipeline)):
         logger.exception("run_query thất bại cho /api/ask")
         return JSONResponse(
             status_code=502,
-            content={"error": _error_message(exc)},
+            content=_error_body(exc),
         )
 
 
@@ -281,7 +316,7 @@ def ask_stream(req: AskRequest, pipeline=Depends(get_pipeline)):
                 yield _sse(event, data)
         except Exception as exc:
             logger.exception("run_query thất bại cho /api/ask/stream")
-            yield _sse("error", {"error": _error_message(exc)})
+            yield _sse("error", _error_body(exc))
 
     return StreamingResponse(stream(), media_type="text/event-stream",
                              headers=SSE_HEADERS)

@@ -34,7 +34,7 @@ def test_ask_explains_itself_when_corpus_is_missing(monkeypatch):
 
     Đo trên ảnh Docker thật: thiếu kho thì ensure_corpus ném RuntimeError trong
     get_pipeline, tức là ở tầng Depends - TRƯỚC thân route - nên
-    _error_message() không bao giờ chạy tới và người dùng chỉ thấy
+    _error_body() không bao giờ chạy tới và người dùng chỉ thấy
     "Internal Server Error".
     """
     def khong_co_kho(*a, **kw):

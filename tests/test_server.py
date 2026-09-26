@@ -126,6 +126,64 @@ def test_ask_gives_quota_specific_message(client):
     assert "quota" in msg.lower() or "hạn mức" in msg.lower(), msg
     assert "Vui lòng thử lại." not in msg
     assert "429" not in msg and "RESOURCE_EXHAUSTED" not in msg
+    assert "retry_after" not in r.json()
+
+
+GROQ_TPM = RuntimeError(
+    "Error code: 429 - {'error': {'message': 'Rate limit reached for model "
+    "`qwen/qwen3.8-27b` on tokens per minute (TPM): Limit 6000, Used 5800, "
+    "Requested 900. Please try again in 7.5s.', 'code': 'rate_limit_exceeded'}}"
+)
+
+
+def test_gioi_han_theo_phut_tra_so_giay_de_tu_hoi_lai(client):
+    """Groq đếm token theo phút: chờ vài giây là hỏi lại được.
+
+    Trước đây mọi 429 đều bị báo "thử lại ngay cũng không được" - sai với giới
+    hạn theo phút. Giao diện cần số giây để đếm ngược rồi tự hỏi lại.
+    """
+    app.dependency_overrides[get_pipeline] = lambda: FakePipeline(raises=GROQ_TPM)
+    r = client.post("/api/ask", json={"question": "câu hỏi?"})
+    assert r.status_code == 502
+    body = r.json()
+    assert body["retry_after"] == 8
+    assert "Thử lại ngay cũng không được" not in body["error"]
+    assert "429" not in body["error"] and "TPM" not in body["error"]
+
+
+def test_stream_gioi_han_theo_phut_cung_gui_so_giay(client):
+    import json
+    app.dependency_overrides[get_pipeline] = lambda: FakePipeline(raises=GROQ_TPM)
+    r = client.post("/api/ask/stream", json={"question": "câu hỏi?"})
+    name, data = _parse_sse(r.text)[-1]
+    assert name == "error"
+    assert json.loads(data)["retry_after"] == 8
+
+
+def test_so_giay_cho_lay_tu_header_retry_after(client):
+    """SDK OpenAI gắn response vào lỗi; Groq ghi số giây vào header retry-after."""
+    from types import SimpleNamespace
+
+    class LoiGroq(Exception):
+        response = SimpleNamespace(headers={"retry-after": "12"})
+
+    app.dependency_overrides[get_pipeline] = lambda: FakePipeline(
+        raises=LoiGroq("Error code: 429")
+    )
+    r = client.post("/api/ask", json={"question": "câu hỏi?"})
+    assert r.json()["retry_after"] == 12
+
+
+def test_han_muc_ngay_khong_tu_hoi_lai_nhung_noi_bao_lau(client):
+    """Chờ quá một phút là hạn mức ngày: tự hỏi lại chỉ đốt thêm lượt gọi."""
+    app.dependency_overrides[get_pipeline] = lambda: FakePipeline(
+        raises=RuntimeError("Error code: 429 - Rate limit reached on tokens per "
+                            "day (TPD). Please try again in 7m12s.")
+    )
+    body = client.post("/api/ask", json={"question": "câu hỏi?"}).json()
+    assert "retry_after" not in body
+    assert "hạn mức" in body["error"].lower()
+    assert "8 phút" in body["error"]
 
 
 def test_ask_keeps_generic_message_for_other_errors(client):

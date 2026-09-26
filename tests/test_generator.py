@@ -365,6 +365,34 @@ def test_goi_lai_khong_suy_luan_khi_model_tra_ve_rong():
     assert out["citations"] == [1]
 
 
+def test_goi_lai_dinh_429_thi_bao_loi_khong_gia_lam_cau_tra_loi():
+    """Lượt gọi lại dính giới hạn token mỗi phút của Groq.
+
+    Trước đây lỗi bị nuốt và người dùng nhận "Hệ thống không tạo được câu trả
+    lời" như một câu trả lời thật. Phải ném ra để máy chủ báo chờ rồi hỏi lại.
+    """
+    from src.generation.generator import Generator
+
+    class FakeMsg:
+        content = ""
+    class FakeChoice:
+        message = FakeMsg()
+    class FakeRes:
+        choices = [FakeChoice()]
+
+    def goi_lai(messages, with_reasoning, max_tokens=None):
+        raise RuntimeError("Error code: 429 - Rate limit reached. Please try again in 3s.")
+
+    g = Generator.__new__(Generator)
+    g.law_types = None
+    g.model_name = "fake"
+    g._create = goi_lai
+    g._call_with_retry = lambda m: FakeRes()
+
+    with pytest.raises(RuntimeError, match="429"):
+        g.generate("câu hỏi?", [{"title": "Luật X", "text": "Điều 1."}])
+
+
 def test_van_bao_khong_tao_duoc_khi_ca_hai_lan_deu_rong():
     from src.generation.generator import Generator
 

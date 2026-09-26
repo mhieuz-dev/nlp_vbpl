@@ -13,7 +13,8 @@ const assert = require("node:assert/strict");
   const page = await browser.newPage(),
     errors = [],
     requests = [];
-  let failure = false;
+  let failure = false,
+    rateLimited = 0;
   page.on("pageerror", (e) => errors.push(e.message));
   await page.setViewport({ width: 1440, height: 900 });
   await page.evaluateOnNewDocument(() =>
@@ -50,6 +51,15 @@ const assert = require("node:assert/strict");
       });
     if (r.url().endsWith("/api/ask/stream")) {
       requests.push(JSON.parse(r.postData()));
+      if (rateLimited > 0) {
+        rateLimited--;
+        return r.respond({
+          status: 200,
+          contentType: "text/event-stream",
+          body:
+            'event: error\ndata: {"error":"Mô hình đang nhận quá nhiều câu hỏi trong một phút.","retry_after":1}\n\n',
+        });
+      }
       return r.respond(
         failure
           ? { status: 502, body: "failed" }
@@ -120,6 +130,40 @@ const assert = require("node:assert/strict");
   assert.equal(await page.$eval("#q-input", (e) => e.value), "Kiểm tra lỗi");
   await page.click("#new-chat");
   failure = false;
+  // Giới hạn theo phút: đếm ngược, giữ câu hỏi, tự hỏi lại đúng MỘT lần.
+  const countdown = () => {
+    const e = document.querySelector("#ask-err");
+    return !e.hidden && /Tự thử lại sau \d+ giây/.test(e.textContent);
+  };
+  rateLimited = 1;
+  let before = requests.length;
+  await page.type("#q-input", "Kiểm tra giới hạn");
+  await page.keyboard.press("Enter");
+  await page.waitForFunction(countdown);
+  assert.equal(
+    await page.$eval("#q-input", (e) => e.value),
+    "Kiểm tra giới hạn",
+  );
+  await page.waitForSelector(".card-answer");
+  assert.equal(requests.length, before + 2);
+  await page.click("#new-chat");
+  rateLimited = 5;
+  before = requests.length;
+  await page.type("#q-input", "Vẫn bị giới hạn");
+  await page.keyboard.press("Enter");
+  await page.waitForFunction(countdown);
+  await page.waitForFunction(() => {
+    const e = document.querySelector("#ask-err");
+    return !e.hidden && !/Tự thử lại sau/.test(e.textContent);
+  });
+  await new Promise((r) => setTimeout(r, 1500));
+  assert.equal(requests.length, before + 2);
+  assert.equal(
+    await page.$eval("#q-input", (e) => e.value),
+    "Vẫn bị giới hạn",
+  );
+  await page.click("#new-chat");
+  rateLimited = 0;
   await page.click("#motion-toggle");
   assert.equal(
     await page.$eval("#motion-toggle", (e) => e.getAttribute("aria-pressed")),
@@ -178,7 +222,7 @@ const assert = require("node:assert/strict");
   );
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: 360 panorama, corpus, topic draft, Enter submit, follow-up context, citations, history persistence/search, errors/retry draft, motion preference, modal, mobile drawer/layout, reduced motion.",
+    "PASS: 360 panorama, corpus, topic draft, Enter submit, follow-up context, citations, history persistence/search, errors/retry draft, rate-limit countdown with single auto-retry, motion preference, modal, mobile drawer/layout, reduced motion.",
   );
   await browser.close();
 })().catch((e) => {
