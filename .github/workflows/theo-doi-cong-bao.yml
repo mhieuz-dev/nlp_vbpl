@@ -124,6 +124,14 @@ jobs:
           gcloud storage cp "gs://${BUCKET}/corpus/${DATE}.tar.gz" \
                             "gs://${BUCKET}/corpus/current.tar.gz"
           echo "đã đẩy kho $(du -h corpus.tar.gz | cut -f1) lên GCS"
+          # Giữ 2 bản theo ngày mới nhất để lùi về khi bản mới hỏng, xoá phần
+          # còn lại (mỗi bản ~380 MB, để dồn thì vượt 5 GB free tier). Đếm theo
+          # SỐ BẢN chứ không theo tuổi: đợt nghỉ dài không có văn bản mới thì
+          # quy tắc theo tuổi xoá sạch bản dự phòng. Tên YYYY-MM-DD nên sort chữ
+          # là sort ngày. Bucket đã tắt soft delete (26/09), không thì file xoá
+          # vẫn bị tính tiền thêm 7 ngày.
+          gcloud storage ls "gs://${BUCKET}/corpus/2*.tar.gz" | sort | head -n -2 \
+            | xargs -r gcloud storage rm
           # Không cần deploy lại: Cloud Run chạy scale-to-zero, lần khởi động
           # nguội kế tiếp sẽ tải bản current.tar.gz mới này.
 
