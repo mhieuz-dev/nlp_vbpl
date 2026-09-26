@@ -253,10 +253,42 @@ const assert = require("node:assert/strict");
     ),
     false,
   );
+  // Điện thoại: trích dẫn, mở nguồn, lịch sử, cuộc mới - đủ vòng như máy tính.
+  const noHScroll = () =>
+    page.evaluate(() => document.documentElement.scrollWidth <= innerWidth);
+  // Ngăn kéo trượt vào mất ~0,5s; bấm sớm thì mục lịch sử còn nằm ngoài màn.
+  const openDrawer = async () => {
+    await page.click("#side-toggle");
+    await page.waitForFunction(
+      () => document.querySelector("#sidebar").getBoundingClientRect().left >= 0,
+    );
+  };
+  await page.click(".ref");
+  assert(
+    await page.$eval(".statute", (e) => e.classList.contains("highlight")),
+  );
+  await page.evaluate(() => scrollTo(0, document.scrollingElement.scrollHeight));
+  await page.click(".card-src summary");
+  await page.evaluate(() => scrollTo(0, document.scrollingElement.scrollHeight));
+  await page.click('.srcitem[data-n="2"] summary');
+  assert(await page.$eval('.srcitem[data-n="2"]', (e) => e.open));
+  assert(await noHScroll());
   await page.screenshot({
     path: "/tmp/verdict-mobile-chat.png",
     fullPage: true,
   });
+  await openDrawer();
+  const chats = await page.$$eval(".chatitem", (els) => els.length);
+  assert(chats >= 2);
+  await page.click(".chatitem:last-child");
+  await page.waitForFunction(
+    () => document.querySelectorAll(".card-answer").length === 2,
+  );
+  assert.equal(await page.$eval("html", (e) => e.dataset.sidebar), "closed");
+  await openDrawer();
+  await page.click("#new-chat");
+  assert(await page.$eval("#state-thread", (e) => e.hidden));
+  assert(await noHScroll());
   await page.emulateMediaFeatures([
     { name: "prefers-reduced-motion", value: "reduce" },
   ]);
@@ -270,7 +302,7 @@ const assert = require("node:assert/strict");
   );
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: 360 panorama, corpus, topic draft, Enter submit, follow-up context, citations with source links, evidence gaps and clarifying question, expandable sources, history persistence/search, errors/retry draft, rate-limit countdown with single auto-retry, motion preference, modal, mobile drawer/layout, reduced motion.",
+    "PASS: 360 panorama, corpus, topic draft, Enter submit, follow-up context, citations with source links, evidence gaps and clarifying question, expandable sources, history persistence/search, errors/retry draft, rate-limit countdown with single auto-retry, motion preference, modal, mobile drawer/layout/citations/sources/history/new chat, reduced motion.",
   );
   await browser.close();
 })().catch((e) => {
