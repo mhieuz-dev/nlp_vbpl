@@ -817,7 +817,7 @@ summary:focus-visible {
 .card-src {
   padding: 17px 22px;
 }
-.card-src summary {
+.card-src > summary {
   font-size: 11px;
   color: var(--fg-soft);
   cursor: pointer;
@@ -827,12 +827,12 @@ summary:focus-visible {
   align-items: center;
   gap: 10px;
 }
-.card-src summary:after {
+.card-src > summary:after {
   content: "＋";
   color: var(--accent);
   font-size: 20px;
 }
-.card-src[open] summary:after {
+.card-src[open] > summary:after {
   content: "−";
 }
 .srclist {
@@ -861,6 +861,30 @@ summary:focus-visible {
 }
 .srcitem .t {
   margin-top: 6px;
+}
+.srcitem summary {
+  cursor: pointer;
+  list-style: none;
+}
+.srcitem summary::-webkit-details-marker {
+  display: none;
+}
+.srcitem q {
+  quotes: none;
+  display: block;
+  margin-top: 12px;
+  font: 13px/1.75 var(--serif);
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+.srcmeta {
+  margin-top: 10px;
+  font-size: 11px;
+  color: var(--fg-soft);
+  overflow-wrap: anywhere;
+}
+.srcmeta a {
+  color: var(--accent);
 }
 .bar {
   display: none;

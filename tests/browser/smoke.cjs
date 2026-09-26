@@ -32,6 +32,19 @@ const assert = require("node:assert/strict");
         title: "Văn bản kiểm thử",
         text: "Đây là dữ liệu giả lập để kiểm tra trích dẫn, không phải nội dung tư vấn pháp luật.",
         score: 0.9,
+        doc_number: "168/2024/NĐ-CP",
+        issue_date: "2024-12-26",
+        source_url: "https://congbao.chinhphu.vn/van-ban/kiem-thu.htm",
+      },
+      {
+        n: 2,
+        article: 5,
+        title: "Bộ luật kiểm thử",
+        text: "Đoạn thứ hai chỉ để đối chiếu.",
+        score: 0.8,
+        doc_number: "",
+        issue_date: "",
+        source_url: "",
       },
     ],
     timings: { retrieve_ms: 100, generate_ms: 200 },
@@ -92,8 +105,31 @@ const assert = require("node:assert/strict");
   assert(
     await page.$eval(".statute", (e) => e.classList.contains("highlight")),
   );
+  // Nguyên văn được trích dẫn tới được văn bản gốc: số hiệu, ngày, link.
+  const meta = await page.$eval('.statute[data-n="1"] .srcmeta', (e) => {
+    const a = e.querySelector("a");
+    return { text: e.textContent, href: a.href, target: a.target, rel: a.rel };
+  });
+  assert.match(meta.text, /168\/2024\/NĐ-CP · ban hành 26\/12\/2024/);
+  assert.equal(meta.href, "https://congbao.chinhphu.vn/van-ban/kiem-thu.htm");
+  assert.equal(meta.target, "_blank");
+  assert.match(meta.rel, /noopener/);
   await page.click(".card-src summary");
   assert(await page.$eval(".card-src", (e) => e.open));
+  // Đoạn chỉ truy xuất (không trích) cũng mở ra đọc được; không có link thì
+  // nói rõ nguồn là bộ dữ liệu, không bịa link.
+  // Ô nhập dính đáy màn hình: cuộn hết trang như người dùng thật, không thì
+  // Puppeteer bấm trúng ô nhập đang che mép dưới thẻ nguồn.
+  await page.evaluate(() => scrollTo(0, document.scrollingElement.scrollHeight));
+  await page.click('.srcitem[data-n="2"] summary');
+  const second = await page.$eval('.srcitem[data-n="2"]', (e) => ({
+    open: e.open,
+    text: e.textContent,
+    links: e.querySelectorAll("a").length,
+  }));
+  assert(second.open);
+  assert.match(second.text, /Đoạn thứ hai chỉ để đối chiếu[\s\S]*UTS_VLC/);
+  assert.equal(second.links, 0);
   await page.type("#q-input", "Hỏi tiếp nội dung kiểm thử");
   await page.keyboard.press("Enter");
   await page.waitForFunction(
@@ -222,7 +258,7 @@ const assert = require("node:assert/strict");
   );
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: 360 panorama, corpus, topic draft, Enter submit, follow-up context, citations, history persistence/search, errors/retry draft, rate-limit countdown with single auto-retry, motion preference, modal, mobile drawer/layout, reduced motion.",
+    "PASS: 360 panorama, corpus, topic draft, Enter submit, follow-up context, citations with source links, expandable sources, history persistence/search, errors/retry draft, rate-limit countdown with single auto-retry, motion preference, modal, mobile drawer/layout, reduced motion.",
   );
   await browser.close();
 })().catch((e) => {

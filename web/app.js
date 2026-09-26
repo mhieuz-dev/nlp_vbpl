@@ -104,6 +104,23 @@
     if (box) box.innerHTML = stepsHtml(done, active);
   }
 
+  /* Số hiệu, ngày ban hành, link bản gốc. Chỉ văn bản crawl từ Công báo có ba
+     trường này (~4,5 nghìn / 53 nghìn đoạn); đoạn từ bộ dữ liệu UTS_VLC không
+     có link tới văn bản gốc thì nói thẳng nguồn, không tự dựng link. */
+  function sourceMetaHtml(c) {
+    var parts = [];
+    if (c.doc_number) parts.push(esc(c.doc_number));
+    if (viDate(c.issue_date)) parts.push("ban hành " + viDate(c.issue_date));
+    parts.push(
+      /^https:\/\//.test(c.source_url || "")
+        ? '<a href="' +
+            esc(c.source_url) +
+            '" target="_blank" rel="noopener noreferrer">Bản gốc trên Công báo ↗</a>'
+        : "Nguồn: bộ dữ liệu UTS_VLC",
+    );
+    return '<p class="srcmeta">' + parts.join(" · ") + "</p>";
+  }
+
   /* Nguyên văn điều luật được trích: serif, khung viền ngọc — tách khỏi lời máy. */
   function renderStatutes(payload) {
     var byN = {};
@@ -126,7 +143,9 @@
           "</div>" +
           "<q>" +
           esc(c.text) +
-          "</q></div>"
+          "</q>" +
+          sourceMetaHtml(c) +
+          "</div>"
         );
       })
       .join("");
@@ -217,11 +236,11 @@
       .map(function (c, i) {
         var label = c.article ? "Điều " + c.article : c.title;
         return (
-          '<div class="srcitem' +
+          '<details class="srcitem' +
           (i < 2 ? " top" : "") +
           '" data-n="' +
           c.n +
-          '">' +
+          '"><summary>' +
           '<div class="h"><span class="id">' +
           esc(label) +
           "</span>" +
@@ -230,7 +249,12 @@
           "</span></div>" +
           '<div class="t">' +
           esc(c.title) +
-          "</div></div>"
+          "</div></summary>" +
+          "<q>" +
+          esc(c.text) +
+          "</q>" +
+          sourceMetaHtml(c) +
+          "</details>"
         );
       })
       .join("");
@@ -838,6 +862,7 @@
         var details = turn.querySelector("details");
         details.open = true;
         source = turn.querySelector('.srcitem[data-n="' + ref.dataset.n + '"]');
+        if (source) source.open = true;
       }
       if (source) {
         source.scrollIntoView({

@@ -16,6 +16,7 @@ from src.embeddings.embedder import Embedder
 from src.generation.generator import Generator, is_rate_limited
 from src.ingestion.corpus_meta import read_meta
 from src.vectorstore.bootstrap import ensure_corpus
+from src.vectorstore.store import OPTIONAL_META
 from src.pipeline.rag import RAGPipeline, build_store
 
 load_dotenv()
@@ -162,6 +163,8 @@ def number_chunks(chunks: list[dict]) -> list[dict]:
             "law_type": c["law_type"],
             "score": c["score"],
             "text": c["text"],
+            # Chỉ văn bản crawl từ Công báo có ba trường này; UTS_VLC để rỗng.
+            **{k: c.get(k, "") for k in OPTIONAL_META},
         }
         for i, c in enumerate(chunks, start=1)
     ]

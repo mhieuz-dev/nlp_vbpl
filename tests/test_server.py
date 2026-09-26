@@ -53,6 +53,27 @@ def test_ask_returns_expected_shape(client):
     assert body["model"] == "fake-model"
 
 
+def test_ask_gui_kem_so_hieu_ngay_ban_hanh_va_link_ban_goc(client):
+    """Giao diện cần ba trường này để dẫn người đọc tới văn bản gốc.
+
+    Chỉ văn bản crawl từ Công báo có chúng; đoạn từ UTS_VLC thì để rỗng chứ
+    không bịa ra.
+    """
+    cong_bao = {"chunk_id": "cb_6", "article": 6, "text": "Điều 6. Xử phạt...",
+                "title": "Nghị định 168/2024/NĐ-CP", "law_type": "decree",
+                "score": 0.88, "doc_number": "168/2024/NĐ-CP",
+                "issue_date": "2024-12-26",
+                "source_url": "https://congbao.chinhphu.vn/van-ban/nghi-dinh-so-168-2024-nd-cp-43733.htm"}
+    uts_vlc = {"chunk_id": "0_1", "article": 1, "text": "Điều 1.",
+               "title": "Bộ luật Dân sự 2015", "law_type": "code", "score": 0.8}
+    app.dependency_overrides[get_pipeline] = lambda: FakePipeline(chunks=[cong_bao, uts_vlc])
+    c1, c2 = client.post("/api/ask", json={"question": "câu hỏi?"}).json()["chunks"]
+    assert c1["source_url"] == cong_bao["source_url"]
+    assert c1["doc_number"] == "168/2024/NĐ-CP"
+    assert c1["issue_date"] == "2024-12-26"
+    assert (c2["source_url"], c2["doc_number"], c2["issue_date"]) == ("", "", "")
+
+
 def test_ask_rejects_empty_question(client):
     app.dependency_overrides[get_pipeline] = lambda: FakePipeline()
     r = client.post("/api/ask", json={"question": "   "})
