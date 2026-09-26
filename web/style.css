@@ -755,6 +755,20 @@ summary:focus-visible {
 .synth .sub-h {
   font-weight: 600;
 }
+.synth .gap,
+.synth .clarify {
+  border-radius: 10px;
+  padding: 10px 14px;
+  line-height: 1.75;
+}
+.synth .gap {
+  border: 1px dashed var(--bd);
+  color: var(--fg-soft);
+}
+.synth .clarify {
+  background: var(--bd);
+  color: var(--accent);
+}
 .ref {
   font: 600 11px var(--sans);
   padding: 2px 5px;

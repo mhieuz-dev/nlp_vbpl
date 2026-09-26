@@ -22,7 +22,10 @@ const assert = require("node:assert/strict");
   );
   await page.setRequestInterception(true);
   const payload = {
-    answer: "**Nội dung kiểm thử giao diện.** Căn cứ tham khảo [1].",
+    answer:
+      "**Nội dung kiểm thử giao diện.** Căn cứ tham khảo [1].\n" +
+      "**Chưa tìm thấy trong kho:** phần lệ phí kiểm thử.\n" +
+      "Để trả lời chính xác hơn, bạn cho biết thêm: loại xe kiểm thử?",
     answered: true,
     citations: [1],
     chunks: [
@@ -105,6 +108,15 @@ const assert = require("node:assert/strict");
   assert(
     await page.$eval(".statute", (e) => e.classList.contains("highlight")),
   );
+  // Phần chưa có căn cứ và câu hỏi lại tách khỏi lời diễn giải thường.
+  assert.match(
+    await page.$eval(".synth .gap", (e) => e.textContent),
+    /^Chưa tìm thấy trong kho: phần lệ phí/,
+  );
+  assert.match(
+    await page.$eval(".synth .clarify", (e) => e.textContent),
+    /loại xe kiểm thử\?$/,
+  );
   // Nguyên văn được trích dẫn tới được văn bản gốc: số hiệu, ngày, link.
   const meta = await page.$eval('.statute[data-n="1"] .srcmeta', (e) => {
     const a = e.querySelector("a");
@@ -114,13 +126,13 @@ const assert = require("node:assert/strict");
   assert.equal(meta.href, "https://congbao.chinhphu.vn/van-ban/kiem-thu.htm");
   assert.equal(meta.target, "_blank");
   assert.match(meta.rel, /noopener/);
+  // Ô nhập dính đáy màn hình: cuộn hết trang như người dùng thật, không thì
+  // Puppeteer bấm trúng ô nhập đang che mép dưới thẻ nguồn.
+  await page.evaluate(() => scrollTo(0, document.scrollingElement.scrollHeight));
   await page.click(".card-src summary");
   assert(await page.$eval(".card-src", (e) => e.open));
   // Đoạn chỉ truy xuất (không trích) cũng mở ra đọc được; không có link thì
   // nói rõ nguồn là bộ dữ liệu, không bịa link.
-  // Ô nhập dính đáy màn hình: cuộn hết trang như người dùng thật, không thì
-  // Puppeteer bấm trúng ô nhập đang che mép dưới thẻ nguồn.
-  await page.evaluate(() => scrollTo(0, document.scrollingElement.scrollHeight));
   await page.click('.srcitem[data-n="2"] summary');
   const second = await page.$eval('.srcitem[data-n="2"]', (e) => ({
     open: e.open,
@@ -258,7 +270,7 @@ const assert = require("node:assert/strict");
   );
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: 360 panorama, corpus, topic draft, Enter submit, follow-up context, citations with source links, expandable sources, history persistence/search, errors/retry draft, rate-limit countdown with single auto-retry, motion preference, modal, mobile drawer/layout, reduced motion.",
+    "PASS: 360 panorama, corpus, topic draft, Enter submit, follow-up context, citations with source links, evidence gaps and clarifying question, expandable sources, history persistence/search, errors/retry draft, rate-limit countdown with single auto-retry, motion preference, modal, mobile drawer/layout, reduced motion.",
   );
   await browser.close();
 })().catch((e) => {

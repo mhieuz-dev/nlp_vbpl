@@ -32,6 +32,10 @@ _THINK_RE = re.compile(r"<think>.*?(?:</think>|$)", re.DOTALL | re.IGNORECASE)
 # (0,861-0,890) chồng lấn câu không trả lời được (0,843-0,864). Nên để chính
 # model phán đoán, đánh dấu bằng một dòng máy đọc được.
 NO_ANSWER_MARKER = "KHÔNG_TÌM_THẤY"
+# Hai tiền tố cố định để giao diện nhận ra và tô riêng (web/app.js, mdToHtml):
+# câu hỏi lại khi thiếu dữ kiện, và phần câu hỏi chưa có căn cứ trong kho.
+CLARIFY_PREFIX = "Để trả lời chính xác hơn, bạn cho biết thêm:"
+GAP_PREFIX = "Chưa tìm thấy trong kho:"
 
 # Trần ngữ cảnh gửi cho model, tính bằng KÝ TỰ (không phải token) để không phải
 # nạp tokenizer. Đo thật trên văn bản luật tiếng Việt: 3,48 ký tự/token.
@@ -126,6 +130,17 @@ QUY TẮC TRÍCH DẪN - bắt buộc tuân thủ:
 - Chỉ được dùng số từ 1 đến {n}. Tuyệt đối không ghi số nằm ngoài khoảng này.
 - Nếu một mệnh đề không dựa trên nguồn nào, không ghi trích dẫn cho mệnh đề đó.
 
+THIẾU DỮ KIỆN VÀ THIẾU CĂN CỨ:
+- Nếu mức phạt hay hệ quả khác nhau theo một dữ kiện câu hỏi chưa nêu (loại xe,
+  độ tuổi, số tiền...), nêu ngắn từng trường hợp có trong nguồn rồi kết thúc
+  bằng đúng một câu hỏi lại, mở đầu bằng "{clarify}".
+- Nếu nguồn chỉ trả lời được một phần câu hỏi (ví dụ thiếu một con số, một mức
+  thu), trả lời phần có căn cứ; phần thiếu KHÔNG viết lẫn trong đoạn mà viết
+  thành một dòng riêng ở cuối, mở đầu bằng "{gap}". Không đoán phần đó.
+  Ví dụ dòng cuối: {gap} thời hạn cụ thể để nộp hồ sơ.
+- Chỉ đặt trong ngoặc kép lời chép NGUYÊN VĂN từ nguồn; lời diễn giải của bạn
+  thì không dùng ngoặc kép.
+
 ĐỊNH DẠNG:
 - Viết thành đoạn văn hoặc gạch đầu dòng "- ". Không dùng tiêu đề markdown (##).
 - Chỉ dùng **in đậm** cho thuật ngữ then chốt.
@@ -190,6 +205,7 @@ def build_prompt(question: str, chunks: list[dict], law_types=None,
     prompt = PROMPT_TEMPLATE.format(
         context=context, question=question, n=len(chunks),
         marker=NO_ANSWER_MARKER, scope=scope_paragraph(law_types),
+        clarify=CLARIFY_PREFIX, gap=GAP_PREFIX,
     )
     return prompt + HISTORY_GUARD if has_history else prompt
 

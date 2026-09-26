@@ -253,6 +253,19 @@ def test_prompt_forbids_naming_document_numbers_not_in_corpus():
         ctx.stop()
 
 
+def test_prompt_bat_hoi_lai_khi_thieu_du_kien_va_noi_ro_phan_chua_co():
+    """Giao diện nhận ra hai dòng này theo tiền tố cố định để tô riêng.
+
+    "Vượt đèn đỏ phạt bao nhiêu" mà không nói loại xe: mức phạt ô tô và xe
+    máy khác hẳn nhau, đoán một loại là trả lời sai cho người kia.
+    """
+    from src.generation.generator import CLARIFY_PREFIX, GAP_PREFIX, build_prompt
+    prompt = build_prompt("câu hỏi?", FIVE_CHUNKS)
+    assert CLARIFY_PREFIX in prompt
+    assert GAP_PREFIX in prompt
+    assert "ngoặc kép" in prompt and "NGUYÊN VĂN" in prompt
+
+
 def test_caps_max_tokens_to_stay_under_provider_limit():
     """Groq free tier chặn theo output-tokens-per-minute, không phải số request.
 

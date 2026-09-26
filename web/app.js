@@ -180,6 +180,18 @@
         out.push("<ul>" + list.join("") + "</ul>");
         list = null;
       }
+      /* Hai dòng có tiền tố cố định do prompt quy định (generator.py:
+         GAP_PREFIX, CLARIFY_PREFIX): phần chưa có căn cứ và câu hỏi lại. */
+      var plain = line.replace(/\*\*/g, "");
+      var kind = /^Chưa tìm thấy trong kho:/.test(plain)
+        ? "gap"
+        : /^Để trả lời chính xác hơn/.test(plain)
+          ? "clarify"
+          : null;
+      if (kind) {
+        out.push('<p class="' + kind + '">' + inline(plain) + "</p>");
+        return;
+      }
       var head = line.match(/^#{1,6}\s+(.*)$/);
       out.push(
         head
