@@ -1010,6 +1010,22 @@ dialog p {
   color: var(--fg-soft);
   line-height: 1.9;
 }
+dialog h3 {
+  font-size: 15px;
+  margin: 20px 0 0;
+}
+.about-types {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+  color: var(--fg-soft);
+  line-height: 1.7;
+  columns: 2;
+}
+dialog {
+  max-height: calc(100dvh - 36px);
+  overflow-y: auto;
+}
 .depth-explanation {
   padding-top: 16px;
   border-top: 1px solid var(--bd);

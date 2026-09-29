@@ -804,6 +804,48 @@
     return m ? m[3] + "/" + m[2] + "/" + m[1] : null;
   }
 
+  var LAW_TYPE_VI = {
+    constitution: "Hiến pháp",
+    code: "Bộ luật",
+    law: "Luật",
+    ordinance: "Pháp lệnh",
+    resolution: "Nghị quyết",
+    decree: "Nghị định",
+    decision: "Quyết định",
+    circular: "Thông tư",
+    directive: "Chỉ thị",
+    consolidated: "Văn bản hợp nhất",
+  };
+
+  /* Mục "Dữ liệu" trong hộp Về H2N LAW: quy mô và cơ cấu kho lấy từ máy chủ. */
+  function fillAboutScope(meta, crawled, newest) {
+    var scope = document.getElementById("about-scope");
+    var list = document.getElementById("about-types");
+    if (!scope || !list) return;
+    scope.textContent =
+      meta.documents.toLocaleString("vi-VN") +
+      " văn bản, chia thành " +
+      meta.chunks.toLocaleString("vi-VN") +
+      " đoạn để tra cứu." +
+      (crawled ? " Kiểm tra nguồn lần cuối " + crawled + "." : "") +
+      (newest ? " Văn bản mới nhất ban hành " + newest + "." : "");
+    var types = meta.law_types || {};
+    list.innerHTML = Object.keys(types)
+      .sort(function (a, b) {
+        return types[b] - types[a];
+      })
+      .map(function (k) {
+        return (
+          "<li>" +
+          esc(LAW_TYPE_VI[k] || "Khác") +
+          ": " +
+          types[k].toLocaleString("vi-VN") +
+          " đoạn</li>"
+        );
+      })
+      .join("");
+  }
+
   function fillCorpusStats() {
     fetch("/api/corpus")
       .then(function (r) {
@@ -839,6 +881,7 @@
         if (newest)
           label += (label ? " · " : "") + "văn bản mới nhất " + newest;
         set("corpus-freshness", label || "Chưa có thông tin cập nhật");
+        fillAboutScope(meta, crawled, newest);
       })
       .catch(function () {
         document.getElementById("corpus-freshness").textContent =

@@ -64,6 +64,7 @@ const assert = require("node:assert/strict");
           documents: 624,
           last_refreshed: "2026-09-19",
           newest_issue_date: "2026-09-01",
+          law_types: { law: 40000, decree: 900, code: 8000 },
         }),
       });
     if (r.url().endsWith("/api/ask/stream")) {
@@ -228,6 +229,15 @@ const assert = require("node:assert/strict");
   );
   await page.click("#about-open");
   assert(await page.$eval("dialog", (e) => e.open));
+  // Mục Dữ liệu: quy mô, mốc ngày và cơ cấu lấy từ /api/corpus, lớn trước.
+  assert.match(
+    await page.$eval("#about-scope", (e) => e.textContent),
+    /^624 văn bản, chia thành 49\.063 đoạn.*19\/09\/2026.*01\/09\/2026/,
+  );
+  assert.deepEqual(
+    await page.$$eval("#about-types li", (l) => l.map((e) => e.textContent)),
+    ["Luật: 40.000 đoạn", "Bộ luật: 8.000 đoạn", "Nghị định: 900 đoạn"],
+  );
   await page.keyboard.press("Escape");
   assert.equal(await page.$eval("dialog", (e) => e.open), false);
   await page.setViewport({ width: 390, height: 844 });
