@@ -7,7 +7,8 @@ import json
 
 import pytest
 
-from scripts.refresh_corpus import check_corpus_intact, load_documents
+from scripts.refresh_corpus import (backfill_effective_dates, check_corpus_intact,
+                                    load_documents)
 
 DOC = {
     "id": "congbao-43733",
@@ -72,3 +73,51 @@ def test_intact_skips_when_no_previous_metadata():
     """Lần nạp đầu tiên chưa có metadata để so, không được chặn."""
     check_corpus_intact(FakeCollection(0), None)
     check_corpus_intact(FakeCollection(0), {})
+
+
+class MetaCollection:
+    """Chỉ đủ get/update metadata như chromadb, không có embedding."""
+
+    def __init__(self, rows):
+        self.rows = rows  # id -> metadata
+
+    def count(self):
+        return len(self.rows)
+
+    def get(self, include=None, limit=None, offset=0):
+        ids = list(self.rows)[offset:offset + (limit or len(self.rows))]
+        return {"ids": ids, "metadatas": [dict(self.rows[i]) for i in ids]}
+
+    def update(self, ids, metadatas):
+        for i, m in zip(ids, metadatas):
+            self.rows[i] = m
+
+
+def test_bu_ngay_hieu_luc_chi_cho_van_ban_cong_bao_con_thieu():
+    url = "https://congbao.chinhphu.vn/van-ban/nghi-dinh-so-168-2024-nd-cp-43733.htm"
+    col = MetaCollection({
+        "a_0": {"doc_id": "congbao-43733", "source_url": url, "effective_date": ""},
+        "a_1": {"doc_id": "congbao-43733", "source_url": url},
+        "b_0": {"doc_id": "congbao-1", "source_url": "https://x/1.htm",
+                "effective_date": "2020-01-01"},
+        "c_0": {"doc_id": "91/2015/QH13", "source_url": ""},  # UTS_VLC, không có nguồn
+    })
+    calls = []
+
+    def lookup(u):
+        calls.append(u)
+        return "2025-01-01"
+
+    n = backfill_effective_dates(col, lookup)
+    assert n == 2
+    assert calls == [url]  # mỗi văn bản tra một lần, bỏ văn bản đã có ngày
+    assert col.rows["a_1"]["effective_date"] == "2025-01-01"
+    assert col.rows["a_1"]["doc_id"] == "congbao-43733"  # giữ metadata khác
+    assert col.rows["b_0"]["effective_date"] == "2020-01-01"
+    assert "effective_date" not in col.rows["c_0"]
+
+
+def test_bu_ngay_hieu_luc_tra_khong_ra_thi_khong_ghi():
+    col = MetaCollection({"a_0": {"doc_id": "congbao-9", "source_url": "https://x/9.htm"}})
+    assert backfill_effective_dates(col, lambda u: "") == 0
+    assert "effective_date" not in col.rows["a_0"]

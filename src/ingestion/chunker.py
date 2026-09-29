@@ -52,6 +52,7 @@ def chunk_documents(docs: list[dict]) -> list[dict]:
                 "issue_date": doc.get("issue_date", ""),
                 "source_url": doc.get("source_url", ""),
                 "doc_number": doc.get("doc_number", ""),
+                "effective_date": doc.get("effective_date", ""),
             })
     return chunks
 

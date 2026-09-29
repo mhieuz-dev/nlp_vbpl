@@ -96,9 +96,10 @@ def test_optional_metadata_is_forwarded_to_chunks():
     """issue_date/source_url/doc_number phải đi được tới vectorstore."""
     docs = [{**LONG_DOCS[0], "issue_date": "2024-12-26",
              "source_url": "https://congbao.chinhphu.vn/x.htm",
-             "doc_number": "168/2024/NĐ-CP"}]
+             "doc_number": "168/2024/NĐ-CP", "effective_date": "2025-01-01"}]
     for c in chunk_documents(docs):
         assert c["issue_date"] == "2024-12-26"
+        assert c["effective_date"] == "2025-01-01"
         assert c["doc_number"] == "168/2024/NĐ-CP"
 
 

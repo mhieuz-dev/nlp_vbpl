@@ -131,3 +131,24 @@ def test_to_document_matches_loader_contract():
     chunks = chunk_documents([doc])
     assert len(chunks) == 2  # cắt đúng theo Điều 6 / Điều 7
     assert chunks[0]["text"].startswith("Điều 6.")
+
+
+def test_parse_detail_lay_ngay_hieu_luc_rieng_voi_ngay_ban_hanh():
+    """Ban hành và hiệu lực là hai mốc khác nhau; NĐ 168 lệch nhau 6 ngày."""
+    d = parse_detail(SAMPLE_DETAIL_HTML)
+    assert d["effective_date"] == "2025-01-01"
+    assert d["issue_date"] == "2024-12-26"
+
+
+def test_parse_detail_thieu_ngay_hieu_luc_thi_de_rong():
+    html = SAMPLE_DETAIL_HTML.replace(" - Hiệu lực: 01/01/2025", " - Hiệu lực: Đang cập nhật")
+    assert parse_detail(html)["effective_date"] == ""
+
+
+def test_to_document_mang_theo_ngay_hieu_luc():
+    doc = to_document(
+        "https://congbao.chinhphu.vn/van-ban/nghi-dinh-so-168-2024-nd-cp-43733.htm",
+        parse_detail(SAMPLE_DETAIL_HTML),
+        clean_pdf_text(SAMPLE_PDF_TEXT),
+    )
+    assert doc["effective_date"] == "2025-01-01"

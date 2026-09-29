@@ -73,6 +73,34 @@ def check_corpus_intact(collection, previous_meta) -> None:
         )
 
 
+def backfill_effective_dates(collection, lookup, page_size: int = 5000) -> int:
+    """Điền ngày hiệu lực cho văn bản Công báo nạp trước khi parser lấy trường này.
+
+    Chỉ sửa metadata (collection.update), không nhúng lại. Mỗi văn bản tra
+    `lookup(source_url)` đúng một lần; tra không ra thì để nguyên, giao diện
+    sẽ ghi "chưa xác định". Trả số chunk đã ghi.
+    """
+    missing = {}  # source_url -> [(id, metadata)]
+    total, offset = collection.count(), 0
+    while offset < total:
+        page = collection.get(include=["metadatas"], limit=page_size, offset=offset)
+        for cid, meta in zip(page["ids"], page["metadatas"]):
+            url = meta.get("source_url", "")
+            if url and not meta.get("effective_date"):
+                missing.setdefault(url, []).append((cid, meta))
+        offset += page_size
+
+    written = 0
+    for url, rows in missing.items():
+        date = lookup(url)
+        if not date:
+            continue
+        collection.update(ids=[cid for cid, _ in rows],
+                          metadatas=[{**m, "effective_date": date} for _, m in rows])
+        written += len(rows)
+    return written
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -144,6 +172,11 @@ def main(argv=None):
         store.delete_doc(doc["id"])
     store.insert(chunks)
     print(f"kho: {before} -> {store.collection.count()} chunk")
+
+    # Văn bản nạp trước 29/09 chưa có ngày hiệu lực. Bù ngay trong lượt này:
+    # trang đã cache thì không tốn request, lượt sau không còn gì để bù.
+    crawler = Crawler(fetch=http_fetcher(), state_path=STATE_PATH, cache_dir=CACHE_DIR)
+    print(f"bù ngày hiệu lực: {backfill_effective_dates(store.collection, crawler.effective_date)} chunk")
 
     path = write_meta(build_corpus_meta(store.collection))
     print(f"đã ghi {path}")

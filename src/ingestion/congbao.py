@@ -55,6 +55,9 @@ _OG_TITLE_RE = re.compile(r'<meta[^>]+property="og:title"[^>]+content="([^"]*)"'
 # Phải neo vào nhãn "Ban hành": trang còn có ngày hiệu lực, ngày hôm nay, và
 # cả ngày rác kiểu "24/12/4373". Lấy "ngày đầu tiên gặp" là sai.
 _ISSUE_DATE_RE = re.compile(r"Ban\s+h[àa]nh:?\s*(\d{2})/(\d{2})/(\d{4})")
+# Cùng dòng với "Ban hành": "Hiệu lực: 01/01/2025". Có trang ghi "Đang cập nhật"
+# thay cho ngày, khi đó để rỗng chứ không đoán.
+_EFFECTIVE_DATE_RE = re.compile(r"Hi[ệe]u\s+l[ựu]c:?\s*(\d{2})/(\d{2})/(\d{4})")
 _PDF_RE = re.compile(r"https://congbaocdn[^\"'\s\\<>]+\.pdf")
 _DOC_NUMBER_RE = re.compile(r"\bsố\s+(\S+/\S+)", re.IGNORECASE)
 
@@ -95,7 +98,7 @@ def parse_rss(xml: str) -> list[dict]:
 
 
 def parse_detail(html: str) -> dict:
-    """Trang văn bản -> {title, doc_number, issue_date, pdf_urls}.
+    """Trang văn bản -> {title, doc_number, issue_date, effective_date, pdf_urls}.
 
     Không bao giờ ném lỗi: thiếu trường nào thì trường đó là chuỗi rỗng. Một
     văn bản thiếu ngày vẫn nạp được, còn hơn làm hỏng cả lượt crawl.
@@ -105,6 +108,7 @@ def parse_detail(html: str) -> dict:
 
     num = _DOC_NUMBER_RE.search(title)
     date = _ISSUE_DATE_RE.search(html)
+    effective = _EFFECTIVE_DATE_RE.search(html)
 
     # Văn bản dài bị chia thành nhiều PDF (NĐ 168/2024 có 2 phần), phải giữ
     # đủ và đúng thứ tự; dict.fromkeys để bỏ trùng mà không đảo thứ tự.
@@ -113,9 +117,15 @@ def parse_detail(html: str) -> dict:
     return {
         "title": title,
         "doc_number": num.group(1) if num else "",
-        "issue_date": f"{date.group(3)}-{date.group(2)}-{date.group(1)}" if date else "",
+        "issue_date": _iso(date),
+        "effective_date": _iso(effective),
         "pdf_urls": pdfs,
     }
+
+
+def _iso(match) -> str:
+    """Match (dd, mm, yyyy) -> 'yyyy-mm-dd', không có thì chuỗi rỗng."""
+    return f"{match.group(3)}-{match.group(2)}-{match.group(1)}" if match else ""
 
 
 def clean_pdf_text(text: str) -> str:
@@ -160,6 +170,7 @@ def to_document(url: str, detail: dict, content: str) -> dict:
         "content": content,
         "law_type": slug["law_type"],
         "issue_date": detail["issue_date"],
+        "effective_date": detail.get("effective_date", ""),
         "doc_number": detail["doc_number"],
         "source_url": url,
     }
@@ -294,6 +305,20 @@ class Crawler:
         doc = to_document(url, detail, text)
         doc["sha256"] = digest
         return doc
+
+    def effective_date(self, url: str) -> str:
+        """Ngày hiệu lực của văn bản đã có trong kho, đọc lại trang (ưu tiên cache).
+
+        Dùng để bù cho văn bản crawl trước khi parser biết lấy trường này.
+        """
+        slug = parse_slug(url)
+        if slug is None:
+            return ""
+        try:
+            html = self._get(url, HTML_DELAY, f"{slug['doc_id']}.html")
+        except FetchError:
+            return ""
+        return parse_detail(html.decode("utf-8", "replace"))["effective_date"]
 
     # -- nội bộ ------------------------------------------------------------
 

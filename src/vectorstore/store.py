@@ -12,9 +12,9 @@ _DIEU_RE = re.compile(r"^\s*Điều\s+(\d+)")
 # các bản sao chiếm hết chỗ (đo thật: top-10 chỉ còn 4 điều khác nhau).
 DEDUP_OVERFETCH = 4
 
-# Ba trường này chỉ có ở văn bản crawl từ Công báo. 48.803 chunk nạp từ
+# Các trường này chỉ có ở văn bản crawl từ Công báo. 48.803 chunk nạp từ
 # HuggingFace không có, nên mọi chỗ đọc đều phải .get(..., "").
-OPTIONAL_META = ("issue_date", "source_url", "doc_number")
+OPTIONAL_META = ("issue_date", "source_url", "doc_number", "effective_date")
 
 
 def _prefer(new: dict, old: dict) -> bool:
