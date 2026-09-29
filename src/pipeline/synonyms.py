@@ -66,6 +66,7 @@ _TU_DIEN = {
 
     # hôn nhân gia đình
     "bỏ nhau": "ly hôn",
+    "ly hôn đơn phương": "ly hôn theo yêu cầu của một bên",
     "quyền nuôi con": "trông nom, chăm sóc, nuôi dưỡng, giáo dục con sau khi ly hôn",
     "chia tài sản": "nguyên tắc giải quyết tài sản của vợ chồng khi ly hôn",
 }

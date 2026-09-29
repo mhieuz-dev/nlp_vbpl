@@ -30,3 +30,9 @@ def test_chan_tran_so_thuat_ngu_noi_them():
 
 def test_khong_phan_biet_hoa_thuong():
     assert expand_query("VƯỢT ĐÈN ĐỎ phạt bao nhiêu?") != "VƯỢT ĐÈN ĐỎ phạt bao nhiêu?"
+
+
+def test_ly_hon_don_phuong_noi_ten_dieu_luat():
+    """Luật HNGĐ Điều 56 viết "ly hôn theo yêu cầu của một bên", không có chữ
+    "đơn phương" - thiếu mục này thì câu nghiệm thu ly-hon-don-phuong trượt."""
+    assert "ly hôn theo yêu cầu của một bên" in expand_query("Ly hôn đơn phương cần gì?")
