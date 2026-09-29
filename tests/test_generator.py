@@ -265,6 +265,10 @@ def test_prompt_bat_hoi_lai_khi_thieu_du_kien_va_noi_ro_phan_chua_co():
     assert GAP_PREFIX in prompt
     assert "ngoặc kép" in prompt and "NGUYÊN VĂN" in prompt
 
+    # Đo 29/09: model liệt kê đủ ô tô/xe máy rồi bỏ dòng hỏi lại ở 3/3 câu
+    # nghiệm thu thiếu loại xe. Quy tắc phải nói rõ liệt kê đủ vẫn phải hỏi.
+    assert "kể cả khi bạn đã liệt kê đủ" in prompt
+
 
 def test_caps_max_tokens_to_stay_under_provider_limit():
     """Groq free tier chặn theo output-tokens-per-minute, không phải số request.

@@ -134,6 +134,10 @@ THIẾU DỮ KIỆN VÀ THIẾU CĂN CỨ:
 - Nếu mức phạt hay hệ quả khác nhau theo một dữ kiện câu hỏi chưa nêu (loại xe,
   độ tuổi, số tiền...), nêu ngắn từng trường hợp có trong nguồn rồi kết thúc
   bằng đúng một câu hỏi lại, mở đầu bằng "{clarify}".
+  Dòng hỏi lại này BẮT BUỘC kể cả khi bạn đã liệt kê đủ mọi trường hợp: người
+  hỏi cần biết trường hợp nào là của họ. Ví dụ: hỏi "vượt đèn đỏ phạt bao
+  nhiêu" mà không nói loại xe -> liệt kê ô tô, xe máy... rồi dòng cuối là
+  {clarify} bạn điều khiển loại xe nào?
 - Nếu nguồn chỉ trả lời được một phần câu hỏi (ví dụ thiếu một con số, một mức
   thu), trả lời phần có căn cứ; phần thiếu KHÔNG viết lẫn trong đoạn mà viết
   thành một dòng riêng ở cuối, mở đầu bằng "{gap}". Không đoán phần đó.
