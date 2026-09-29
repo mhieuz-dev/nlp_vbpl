@@ -7,7 +7,10 @@
 
 Chạy: python -m evaluation.acceptance_eval [--split dev|holdout|all]
 Gọi LLM thật (Groq free tier) nên chậm: hạn mức token/phút buộc phải chờ giữa
-các câu. Không tốn tiền.
+các câu. Không tốn tiền, NHƯNG dùng chung hạn mức 200.000 token/NGÀY với bản
+deploy: mỗi câu ~5.300 token, một lượt 12 câu ~64.000. Ngày 29/09 chạy 2 lượt
+dev + holdout là cạn hạn mức và web thật báo 429 khoảng nửa tiếng. Chạy tối đa
+một lượt mỗi ngày, vào giờ ít người dùng.
 """
 import argparse
 import json
@@ -100,7 +103,10 @@ def main(argv=None):
     ap.add_argument("--split", choices=("dev", "holdout", "all"), default="dev")
     ap.add_argument("--out", default="evaluation/acceptance_results.json",
                     help="ghi từng câu + tổng hợp (file sinh lại được, không commit)")
+    ap.add_argument("--ids", default="",
+                    help="chỉ chạy các id này (phẩy ngăn cách), để chạy tiếp khi Groq báo 429")
     args = ap.parse_args(argv)
+    ids = {i.strip() for i in args.ids.split(",") if i.strip()}
 
     from dotenv import load_dotenv
     from src.embeddings.embedder import Embedder
@@ -113,7 +119,8 @@ def main(argv=None):
     meta = read_meta()
     pipeline = RAGPipeline(store=build_store(Embedder()), generator=Generator(
         law_types=set(meta["law_types"]) if meta else None))
-    items = [q for q in ACCEPTANCE if args.split == "all" or q["split"] == args.split]
+    items = [q for q in ACCEPTANCE if (args.split == "all" or q["split"] == args.split)
+             and (not ids or q["id"] in ids)]
     rows = run(pipeline, items)
     summary = summarize(rows)
 
