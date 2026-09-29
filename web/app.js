@@ -808,6 +808,13 @@
             "Chưa có thông tin cập nhật kho.";
           return;
         } // chưa refresh lần nào: giữ nguyên dấu gạch
+        if (meta.status === "loading") {
+          // Kho deploy chưa tải xong: báo đúng như vậy rồi hỏi lại sau.
+          document.getElementById("corpus-freshness").textContent =
+            "Đang tải kho dữ liệu…";
+          setTimeout(fillCorpusStats, 5000);
+          return;
+        }
         var n = meta.chunks.toLocaleString("vi-VN");
         var set = function (id, v) {
           var el = document.getElementById(id);

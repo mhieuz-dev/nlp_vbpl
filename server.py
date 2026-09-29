@@ -285,7 +285,12 @@ def corpus():
 
     Trả null (kèm 200) khi chưa chạy refresh lần nào - đó là trạng thái hợp lệ,
     không phải lỗi máy chủ. Giao diện tự biết giữ số mặc định.
+
+    Đang nạp thì trả {"status": "loading"}: lúc đó data/ chưa có kho deploy nên
+    read_meta sẽ lui về bản mồi cũ trong repo, hiện số sai vài chục giây.
     """
+    if _load_state == "loading":
+        return {"status": "loading"}
     return read_meta(CORPUS_META_PATH)
 
 

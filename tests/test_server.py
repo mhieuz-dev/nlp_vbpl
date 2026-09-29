@@ -285,6 +285,14 @@ def test_stream_returns_503_warming_while_loading(warming_client):
     assert r.json()["detail"]["status"] == "warming"
 
 
+def test_corpus_bao_dang_tai_thay_vi_so_cu_luc_khoi_dong(warming_client):
+    """Lúc kho deploy chưa tải xong, bản mồi trong repo (624 văn bản, 07/09) là
+    số cũ. Trả nó ra là nói sai quy mô kho vài chục giây đầu."""
+    r = warming_client.get("/api/corpus")
+    assert r.status_code == 200
+    assert r.json() == {"status": "loading"}
+
+
 def test_ask_returns_503_when_load_failed(monkeypatch):
     import server
     monkeypatch.setattr(server, "_pipeline", None)
