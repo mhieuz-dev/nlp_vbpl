@@ -59,9 +59,9 @@ def test_cau_thieu_du_kien_phai_hoi_lai():
     assert score_item(it, [RIGHT], doan)["behavior"] is False
 
 
-def test_cau_tra_loi_thuong_khong_duoc_hoi_lai():
+def test_cau_tra_loi_thuong_tra_loi_xong_hoi_them_van_dung():
     s = score_item(item(), [RIGHT], result(f"Nữ 18 tuổi [1].\n{CLARIFY_PREFIX} gì?"))
-    assert s["behavior"] is False
+    assert s == {"evidence": True, "behavior": True, "grounded": True}
 
 
 def test_cau_khong_tra_loi_duoc_tu_choi_hoac_ghi_ro_phan_thieu_deu_dung():

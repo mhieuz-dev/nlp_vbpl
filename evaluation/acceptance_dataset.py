@@ -11,12 +11,16 @@ hệ thống PHẢI làm gì:
 không được nhìn vào kết quả từng câu của nó để sửa prompt, từ điển hay truy
 xuất - nhìn vào là nó thành dev, và con số nghiệm thu thành điểm học tủ.
 
-Ground truth đã đối chiếu nguyên văn trong kho ngày 29/09/2026. Kho không có
-Luật Bảo hiểm xã hội và Luật Bảo vệ quyền lợi người tiêu dùng (tra tên văn bản),
-nên hai câu về chúng là câu không trả lời được.
+Ground truth đã đối chiếu nguyên văn trong kho ngày 29/09/2026. Câu không trả
+lời được chọn theo chủ đề KHÔNG xuất hiện ở bất kỳ đoạn nào (so bỏ dấu: tên văn
+bản UTS_VLC viết không dấu, tra có dấu sẽ tưởng kho thiếu Luật BHXH trong khi
+kho có - lỗi đã mắc ngày 29/09).
 """
 from evaluation.retrieval_dataset import (BLDS_2015, BLHS_2015, BLLD_2019, HNGD_2014,
                                           ND168_2024)
+
+# Kho chỉ có Luật BHXH 2014 (và bản 2006), không có Luật BHXH 2024 đang áp dụng.
+BHXH_2014 = frozenset({"Luat-Bao-hiem-xa-hoi-2014-259700"})
 
 ACCEPTANCE = [
     # ===== dev =====
@@ -55,9 +59,10 @@ ACCEPTANCE = [
     {"id": "nau-pho", "split": "dev", "kind": "abstain",
      "question": "Cách nấu phở bò ngon?",
      "expected": [], "must_contain": []},
-    {"id": "bhxh-luong-huu", "split": "dev", "kind": "abstain",
+    {"id": "bhxh-luong-huu", "split": "dev", "kind": "answer",
      "question": "Đóng bảo hiểm xã hội bao nhiêu năm thì được nhận lương hưu?",
-     "expected": [], "must_contain": []},
+     "expected": [(BHXH_2014, 54)],
+     "must_contain": [["20 năm", "hai mươi năm"]]},
     {"id": "noi-tiep-o-to", "split": "dev", "kind": "answer",
      "history": [
          {"role": "user", "content": "Xe máy vượt đèn đỏ phạt bao nhiêu?"},
@@ -110,9 +115,8 @@ ACCEPTANCE = [
     {"id": "gia-vang", "split": "holdout", "kind": "abstain",
      "question": "Giá vàng SJC hôm nay bao nhiêu?",
      "expected": [], "must_contain": []},
-    {"id": "doi-tra-hang-online", "split": "holdout", "kind": "abstain",
-     "question": "Mua hàng online bị lỗi thì luật bảo vệ người tiêu dùng cho đổi trả "
-                 "trong bao nhiêu ngày?",
+    {"id": "thue-bitcoin", "split": "holdout", "kind": "abstain",
+     "question": "Mua bán bitcoin ở Việt Nam thì bị đánh thuế bao nhiêu phần trăm?",
      "expected": [], "must_contain": []},
     {"id": "noi-tiep-luong-thu-viec", "split": "holdout", "kind": "answer",
      "history": [

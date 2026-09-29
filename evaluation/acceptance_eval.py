@@ -37,10 +37,9 @@ def score_item(item: dict, chunks: list[dict], result: dict) -> dict:
         return {"evidence": None, "behavior": behavior, "grounded": None}
 
     evidence = any(_is_right(c, item) for c in chunks)
-    if item["kind"] == "clarify":
-        behavior = answered and asks_back
-    else:
-        behavior = answered and not asks_back
+    # Câu trả lời được: trả lời xong hỏi thêm cho sát trường hợp vẫn là đúng
+    # (câu "báo trước bao nhiêu ngày" nêu đủ 45/30/3 ngày rồi hỏi loại hợp đồng).
+    behavior = answered and asks_back if item["kind"] == "clarify" else answered
 
     cited = {int(n) for n in _CITE_RE.findall(answer)}
     cites_right = any(1 <= n <= len(chunks) and _is_right(chunks[n - 1], item)
