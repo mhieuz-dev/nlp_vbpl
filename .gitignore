@@ -27,3 +27,4 @@ __pycache__/
 .gradio/
 .vscode/
 *.log
+evaluation/acceptance_results.json
