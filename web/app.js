@@ -104,13 +104,20 @@
     if (box) box.innerHTML = stepsHtml(done, active);
   }
 
-  /* Số hiệu, ngày ban hành, link bản gốc. Chỉ văn bản crawl từ Công báo có ba
+  /* Số hiệu, ngày ban hành, ngày hiệu lực, link bản gốc. Chỉ văn bản crawl từ Công báo có ba
      trường này (~4,5 nghìn / 53 nghìn đoạn); đoạn từ bộ dữ liệu UTS_VLC không
      có link tới văn bản gốc thì nói thẳng nguồn, không tự dựng link. */
   function sourceMetaHtml(c) {
     var parts = [];
     if (c.doc_number) parts.push(esc(c.doc_number));
     if (viDate(c.issue_date)) parts.push("ban hành " + viDate(c.issue_date));
+    // Ngày có hiệu lực lấy từ Công báo, KHÔNG có nghĩa là hôm nay còn hiệu
+    // lực: kho chưa theo dõi sửa đổi/bãi bỏ nên không nói điều đó.
+    parts.push(
+      viDate(c.effective_date)
+        ? "có hiệu lực từ " + viDate(c.effective_date)
+        : "ngày hiệu lực: chưa xác định",
+    );
     parts.push(
       /^https:\/\//.test(c.source_url || "")
         ? '<a href="' +
