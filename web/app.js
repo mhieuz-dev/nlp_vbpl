@@ -125,7 +125,20 @@
             '" target="_blank" rel="noopener noreferrer">Bản gốc trên Công báo ↗</a>'
         : "Nguồn: bộ dữ liệu UTS_VLC",
     );
-    return '<p class="srcmeta">' + parts.join(" · ") + "</p>";
+    // Quan hệ sửa đổi/thay thế: chỉ hiện điều đã xác minh, kèm điều làm căn cứ.
+    var rel = (c.relations || [])
+      .map(function (r) {
+        return esc(r.text) + " (theo " + esc(r.basis) + ")";
+      })
+      .join("; ");
+    return (
+      '<p class="srcmeta">' +
+      parts.join(" · ") +
+      "</p>" +
+      '<p class="srcmeta srcrel">' +
+      (rel || "Quan hệ sửa đổi, thay thế: chưa xác định") +
+      "</p>"
+    );
   }
 
   /* Nguyên văn điều luật được trích: serif, khung viền ngọc — tách khỏi lời máy. */

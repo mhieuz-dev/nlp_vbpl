@@ -38,6 +38,9 @@ const assert = require("node:assert/strict");
         doc_number: "168/2024/NĐ-CP",
         issue_date: "2024-12-26",
         effective_date: "2025-01-01",
+        relations: [
+          { text: "Sửa đổi một phần Nghị định số 100/2019/NĐ-CP", basis: "Điều 52 Nghị định kiểm thử" },
+        ],
         source_url: "https://congbao.chinhphu.vn/van-ban/kiem-thu.htm",
       },
       {
@@ -126,6 +129,10 @@ const assert = require("node:assert/strict");
   });
   assert.match(meta.text, /168\/2024\/NĐ-CP · ban hành 26\/12\/2024 · có hiệu lực từ 01\/01\/2025/);
   assert.equal(meta.href, "https://congbao.chinhphu.vn/van-ban/kiem-thu.htm");
+  assert.equal(
+    await page.$eval('.statute[data-n="1"] .srcrel', (e) => e.textContent),
+    "Sửa đổi một phần Nghị định số 100/2019/NĐ-CP (theo Điều 52 Nghị định kiểm thử)",
+  );
   assert.equal(meta.target, "_blank");
   assert.match(meta.rel, /noopener/);
   // Ô nhập dính đáy màn hình: cuộn hết trang như người dùng thật, không thì
