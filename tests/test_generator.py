@@ -446,3 +446,55 @@ def test_chi_chan_lich_su_khi_that_su_co_lich_su():
     chunks = [{"title": "Luật X", "text": "Điều 1."}]
     assert HISTORY_GUARD not in build_prompt("q", chunks)
     assert HISTORY_GUARD in build_prompt("q", chunks, has_history=True)
+
+
+GARBLED = ("Phạt tiển 6.000.000 đống nếu nồg đọ cồg vượtc qua 50 miligam. "
+           "Để trả lời chính xác hơg, bạn cho biếg thêg.")
+CLEAN = "Phạt tiền từ 6.000.000 đồng đến 8.000.000 đồng [1]."
+
+
+def _gen_seq(*answers):
+    """Như _gen nhưng mỗi lần gọi API trả lần lượt một câu trong answers."""
+    ctx = patch("src.generation.generator.OpenAI")
+    mock_client = MagicMock()
+    mock_client.chat.completions.create.side_effect = [
+        MagicMock(choices=[MagicMock(message=MagicMock(content=a))]) for a in answers
+    ]
+    ctx.start().return_value = mock_client
+    return Generator(api_key="fake_key"), mock_client, ctx
+
+
+def test_garbled_words_bat_am_tiet_sai_chinh_ta():
+    from src.generation.generator import garbled_words
+    assert garbled_words(GARBLED) == ["nồg", "cồg", "vượtc", "hơg", "biếg", "thêg"]
+    assert garbled_words(CLEAN) == []
+    # Chữ không dấu (tên riêng, tiếng Anh) không xét.
+    assert garbled_words("Groq trả lời theo Điều 6 Nghị định 168/2024/NĐ-CP") == []
+
+
+def test_generate_sinh_lai_khi_cau_tra_loi_bi_hong_chu():
+    gen, client, ctx = _gen_seq(GARBLED, CLEAN)
+    try:
+        assert gen.generate("rượu bia phạt bao nhiêu?", SAMPLE_CHUNKS)["answer"] == CLEAN
+        assert client.chat.completions.create.call_count == 2
+    finally:
+        ctx.stop()
+
+
+def test_generate_khong_sinh_lai_khi_cau_tra_loi_lanh():
+    gen, client, ctx = _gen_seq(CLEAN)
+    try:
+        assert gen.generate("rượu bia phạt bao nhiêu?", SAMPLE_CHUNKS)["answer"] == CLEAN
+        assert client.chat.completions.create.call_count == 1
+    finally:
+        ctx.stop()
+
+
+def test_generate_chi_sinh_lai_mot_lan_va_giu_ban_it_loi_hon():
+    worse = GARBLED + " Nồg đọ cồg rấg cao."
+    gen, client, ctx = _gen_seq(worse, GARBLED)
+    try:
+        assert gen.generate("rượu bia phạt bao nhiêu?", SAMPLE_CHUNKS)["answer"] == GARBLED
+        assert client.chat.completions.create.call_count == 2
+    finally:
+        ctx.stop()

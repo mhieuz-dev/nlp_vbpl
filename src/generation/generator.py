@@ -262,6 +262,31 @@ def _answer_text(response) -> str:
     return _THINK_RE.sub("", raw).strip()
 
 
+# Model trên Groq thỉnh thoảng sinh chữ hỏng giữa câu: "nồg đọ cồg", "biếg
+# thêg", "vượtc" (bắt được 03/10 ở câu rượu bia, chạy lại thì lành). Âm tiết
+# tiếng Việt chỉ kết thúc bằng nguyên âm hoặc một trong tám phụ âm cuối dưới
+# đây, nên chữ có dấu mà đuôi lạ chắc chắn là chữ hỏng. Đo trên 13.500 chunk
+# của kho: không chunk nào có từ 2 chữ như vậy trở lên (cả kho chỉ 2 lỗi gõ lẻ
+# "ngoàl", "bántt"), câu trả lời hỏng kia có 14.
+_VOWELS = set("aăâeêioôơuưy" "àằầèềìòồờùừỳ" "áắấéếíóốớúứý"
+              "ảẳẩẻểỉỏổởủửỷ" "ãẵẫẽễĩõỗỡũữỹ" "ạặậẹệịọộợụựỵ")
+_CODAS = {"", "c", "ch", "m", "n", "ng", "nh", "p", "t"}
+_WORD_RE = re.compile(r"[^\W\d_]+")
+GARBLED_MIN_WORDS = 2
+
+
+def garbled_words(text: str) -> list[str]:
+    """Các chữ có dấu tiếng Việt nhưng phần đuôi sau nguyên âm cuối không hợp lệ."""
+    out = []
+    for w in _WORD_RE.findall(text.lower()):
+        if w.isascii():
+            continue
+        last = max((i for i, ch in enumerate(w) if ch in _VOWELS), default=-1)
+        if last >= 0 and w[last + 1:] not in _CODAS:
+            out.append(w)
+    return out
+
+
 def _is_overloaded(exc: Exception) -> bool:
     s = str(exc)
     return any(k in s for k in ("503", "UNAVAILABLE", "high demand", "overloaded"))
@@ -377,6 +402,16 @@ class Generator:
                 if is_rate_limited(exc):
                     raise
                 logger.exception("gọi lại không-suy-luận cũng hỏng")
+
+        bad = garbled_words(answer)
+        if len(bad) >= GARBLED_MIN_WORDS:
+            # Lỗi ngẫu nhiên phía model, sinh lại một lần là đủ. Lần hai vẫn
+            # hỏng thì giữ bản ít chữ hỏng hơn chứ không thử tiếp, để không ăn
+            # thêm hạn mức token của Groq.
+            logger.warning("câu trả lời hỏng chữ %s, sinh lại", bad[:5])
+            retry = _answer_text(self._call_with_retry(messages))
+            if retry and len(garbled_words(retry)) < len(bad):
+                answer = retry
 
         if not answer:
             answer = "Hệ thống không tạo được câu trả lời cho câu hỏi này."
