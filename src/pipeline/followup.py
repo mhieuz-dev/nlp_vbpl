@@ -13,7 +13,10 @@ Cách dùng ở đây: ghép câu hỏi trước vào câu hiện tại để nh
 câu hiện tại trông như câu nối tiếp. Câu hỏi đứng một mình vẫn đi nguyên vẹn,
 nên bộ đánh giá Recall cũ (22 câu, đều đứng một mình) không đổi một chữ.
 """
+import logging
 import re
+
+logger = logging.getLogger(__name__)
 
 # Dấu hiệu câu dựa vào ngữ cảnh trước đó: từ nối, đại từ thay thế, câu cụt.
 _FOLLOWUP_MARKERS = (
@@ -81,7 +84,16 @@ def retrieval_query(question: str, history, condense=None) -> str:
     if condense is not None:
         try:
             viet_lai = (condense(question, history) or "").strip()
-        except Exception:
+        except Exception as exc:
+            # 429 thì ném ra, KHÔNG lui về ghép chuỗi: ghép chuỗi tìm kém hẳn
+            # (R@5 0,33 so với 0,83 trên 6 câu nối tiếp) và model trả lời "không
+            # chứa thông tin" như thật - bắt được 03/10 ở bộ nghiệm thu. Server
+            # đã có đường cho 429: đếm ngược rồi tự hỏi lại.
+            # Import muộn vì generator.py import module này.
+            from src.generation.generator import is_rate_limited
+            if is_rate_limited(exc):
+                raise
+            logger.warning("viết lại câu nối tiếp hỏng, lui về ghép chuỗi: %s", exc)
             viet_lai = ""     # viết lại hỏng thì vẫn phải trả lời được câu hỏi
         # Chặn kết quả vô lý: rỗng, hoặc dài bất thường nghĩa là model đã kể lể
         # thay vì viết một câu hỏi.

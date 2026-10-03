@@ -91,3 +91,15 @@ def test_dai_tu_chi_dinh_do_ay_la_noi_tiep():
     assert is_followup("Nếu người đó mới 15 tuổi thì có bị truy cứu không?")
     assert is_followup("Nếu người lao động ấy không báo trước thì phải bồi thường gì không?")
     assert is_followup("Khi đó người sử dụng lao động phải trả trợ cấp gì cho họ?")
+
+
+def test_viet_lai_gap_429_thi_nem_loi_khong_lui_ve_ghep_chuoi():
+    """Lui về ghép chuỗi khi 429 làm truy xuất kém hẳn (R@5 0,33 so với 0,83) và
+    model trả lời "không chứa thông tin" như thật; đo được 03/10 ở bộ nghiệm thu.
+    Ném 429 ra để server báo đếm ngược rồi tự hỏi lại."""
+    import pytest
+
+    def bi_gioi_han(q, h):
+        raise RuntimeError("Error code: 429 - rate limit reached")
+    with pytest.raises(RuntimeError, match="429"):
+        retrieval_query("còn ô tô thì sao?", LICH_SU, condense=bi_gioi_han)
