@@ -82,6 +82,29 @@ ACCEPTANCE = [
      "expected": [(HNGD_2014, 8)],
      "must_contain": [["18 tuổi", "mười tám tuổi"]]},
 
+    {"id": "noi-tiep-nld-khong-bao-truoc", "split": "dev", "kind": "answer",
+     "history": [
+         {"role": "user", "content": "Người lao động đơn phương chấm dứt hợp đồng "
+          "phải báo trước bao nhiêu ngày?"},
+         {"role": "assistant", "content": "Ít nhất 45 ngày với hợp đồng không xác "
+          "định thời hạn, 30 ngày với hợp đồng từ 12 đến 36 tháng [1]."},
+     ],
+     "question": "Nếu người lao động ấy không báo trước thì phải bồi thường gì không?",
+     "expected": [(BLLD_2019, 40)],
+     "must_contain": [["nửa tháng tiền lương"]]},
+    # Chuyển từ holdout sang 03/10: đã nhìn vào chỗ trượt của câu này (đại từ
+    # "người đó" không được nhận là câu nối tiếp) để sửa followup.py, nên nó
+    # không còn là câu giữ riêng. Câu noi-tiep-tai-san-ly-hon thay chỗ nó.
+    {"id": "noi-tiep-trom-15-tuoi", "split": "dev", "kind": "answer",
+     "history": [
+         {"role": "user", "content": "Trộm cắp tài sản bị phạt tù bao nhiêu năm?"},
+         {"role": "assistant", "content": "Tuỳ giá trị tài sản và tình tiết, từ "
+          "cải tạo không giam giữ đến 20 năm tù [1]."},
+     ],
+     "question": "Nếu người đó mới 15 tuổi thì có bị truy cứu không?",
+     "expected": [(BLHS_2015, 12)],
+     "must_contain": []},
+
     # ===== holdout: chỉ chấm, không chỉnh theo =====
     {"id": "tuoi-nghi-huu-nam", "split": "holdout", "kind": "answer",
      "question": "Tuổi nghỉ hưu của lao động nam là bao nhiêu?",
@@ -127,13 +150,13 @@ ACCEPTANCE = [
      "question": "Lương trong thời gian đó ít nhất là bao nhiêu?",
      "expected": [(BLLD_2019, 26)],
      "must_contain": [["85%", "85 phần trăm"]]},
-    {"id": "noi-tiep-trom-15-tuoi", "split": "holdout", "kind": "answer",
+    {"id": "noi-tiep-tai-san-ly-hon", "split": "holdout", "kind": "answer",
      "history": [
-         {"role": "user", "content": "Trộm cắp tài sản bị phạt tù bao nhiêu năm?"},
-         {"role": "assistant", "content": "Tuỳ giá trị tài sản và tình tiết, từ "
-          "cải tạo không giam giữ đến 20 năm tù [1]."},
+         {"role": "user", "content": "Tài sản chung của vợ chồng gồm những gì?"},
+         {"role": "assistant", "content": "Gồm tài sản do vợ, chồng tạo ra, thu nhập "
+          "do lao động, sản xuất, kinh doanh trong thời kỳ hôn nhân [1]."},
      ],
-     "question": "Nếu người đó mới 15 tuổi thì có bị truy cứu không?",
-     "expected": [(BLHS_2015, 12)],
-     "must_contain": []},
+     "question": "Khi ly hôn thì tài sản ấy được chia theo nguyên tắc nào?",
+     "expected": [(HNGD_2014, 59)],
+     "must_contain": [["chia đôi"]]},
 ]
