@@ -38,8 +38,10 @@ def _dedup_key(text: str) -> str:
 class VectorStore:
     def __init__(self, embedder: Embedder, collection_name: str = "vn_legal",
                  persist_dir: str = "./data/chroma_db", article_lookup: bool = False,
-                 superseded: dict | None = None):
+                 superseded: dict | None = None, dedup: bool = True):
         self.embedder = embedder
+        # Tắt chỉ để thí nghiệm cắt bỏ đo được khử trùng mua được gì.
+        self.dedup = dedup
         # doc_id văn bản đã bị thay thế toàn bộ -> doc_id văn bản thay thế nó
         # (danh sách đã xác minh ở src/pipeline/relations.py). Chỉ bỏ văn bản cũ
         # khi kho ĐÃ có văn bản thay thế; tính lười ở truy vấn đầu tiên.
@@ -138,6 +140,9 @@ class VectorStore:
             """Nhận một chunk, trả True khi output đã đủ top_k."""
             if chunk["doc_id"] in dropped:
                 return False
+            if not self.dedup:
+                output.append(chunk)
+                return len(output) == top_k
             key = _dedup_key(chunk["text"])
             pos = seen.get(key)
             if pos is None:
