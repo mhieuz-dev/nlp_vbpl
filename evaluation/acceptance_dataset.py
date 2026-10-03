@@ -19,8 +19,10 @@ kho có - lỗi đã mắc ngày 29/09).
 from evaluation.retrieval_dataset import (BLDS_2015, BLHS_2015, BLLD_2019, HNGD_2014,
                                           ND168_2024)
 
-# Kho chỉ có Luật BHXH 2014 (và bản 2006), không có Luật BHXH 2024 đang áp dụng.
-BHXH_2014 = frozenset({"Luat-Bao-hiem-xa-hoi-2014-259700"})
+# Luật BHXH đang áp dụng: VBHN 19/VBHN-VPQH (12/02/2026) hợp nhất Luật BHXH
+# 41/2024/QH15, nạp từ Công báo ngày 03/10. Trước đó kho chỉ có bản 2014 và
+# 2006, nên app trả lời "20 năm" theo luật đã hết hiệu lực.
+BHXH_HIEN_HANH = frozenset({"congbao-468972"})
 
 ACCEPTANCE = [
     # ===== dev =====
@@ -61,8 +63,9 @@ ACCEPTANCE = [
      "expected": [], "must_contain": []},
     {"id": "bhxh-luong-huu", "split": "dev", "kind": "answer",
      "question": "Đóng bảo hiểm xã hội bao nhiêu năm thì được nhận lương hưu?",
-     "expected": [(BHXH_2014, 54)],
-     "must_contain": [["20 năm", "hai mươi năm"]]},
+     # Điều 64: BHXH bắt buộc; Điều 98: tự nguyện. Cả hai đều "từ đủ 15 năm".
+     "expected": [(BHXH_HIEN_HANH, 64), (BHXH_HIEN_HANH, 98)],
+     "must_contain": [["15 năm", "mười lăm năm"]]},
     {"id": "noi-tiep-o-to", "split": "dev", "kind": "answer",
      "history": [
          {"role": "user", "content": "Xe máy vượt đèn đỏ phạt bao nhiêu?"},
