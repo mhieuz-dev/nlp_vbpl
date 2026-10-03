@@ -37,8 +37,14 @@ def _dedup_key(text: str) -> str:
 
 class VectorStore:
     def __init__(self, embedder: Embedder, collection_name: str = "vn_legal",
-                 persist_dir: str = "./data/chroma_db", article_lookup: bool = False):
+                 persist_dir: str = "./data/chroma_db", article_lookup: bool = False,
+                 superseded: dict | None = None):
         self.embedder = embedder
+        # doc_id văn bản đã bị thay thế toàn bộ -> doc_id văn bản thay thế nó
+        # (danh sách đã xác minh ở src/pipeline/relations.py). Chỉ bỏ văn bản cũ
+        # khi kho ĐÃ có văn bản thay thế; tính lười ở truy vấn đầu tiên.
+        self.superseded = superseded or {}
+        self._dropped = None
         # Chỉ mục tra theo số điều dựng lười ở truy vấn đầu tiên có nêu "Điều N",
         # để test và các đường dùng khác không phải trả giá dựng chỉ mục.
         self.article_lookup = article_lookup
@@ -109,7 +115,16 @@ class VectorStore:
             for cid, doc, meta in zip(got["ids"], got["documents"], got["metadatas"])
         ]
 
+    def _dropped_docs(self) -> set:
+        if self._dropped is None:
+            self._dropped = {
+                cu for cu, moi in self.superseded.items()
+                if self.collection.get(where={"doc_id": moi}, limit=1)["ids"]
+            }
+        return self._dropped
+
     def query(self, query_text: str, top_k: int = 5) -> list[dict]:
+        dropped = self._dropped_docs()
         query_embedding = self.embedder.embed_query(query_text)
         results = self.collection.query(
             query_embeddings=[query_embedding],
@@ -121,6 +136,8 @@ class VectorStore:
 
         def take(chunk) -> bool:
             """Nhận một chunk, trả True khi output đã đủ top_k."""
+            if chunk["doc_id"] in dropped:
+                return False
             key = _dedup_key(chunk["text"])
             pos = seen.get(key)
             if pos is None:

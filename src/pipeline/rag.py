@@ -1,6 +1,7 @@
 from src.vectorstore.store import VectorStore
 from src.generation.generator import Generator, fit_to_context
 from src.pipeline.followup import retrieval_query
+from src.pipeline.relations import SUPERSEDED
 from src.pipeline.synonyms import expand_query
 
 
@@ -10,8 +11,10 @@ def build_store(embedder) -> VectorStore:
     article_lookup: câu hỏi nêu đích danh "Điều N" thì dense gần như không tìm
     được (đo thật: Điều 630 không lọt cả top-30). Bật lên, Recall@5 0.773 ->
     0.864, MRR 0.551 -> 0.712.
+
+    superseded: bỏ văn bản đã bị thay thế toàn bộ khi kho có văn bản thay thế.
     """
-    return VectorStore(embedder=embedder, article_lookup=True)
+    return VectorStore(embedder=embedder, article_lookup=True, superseded=SUPERSEDED)
 
 
 class RAGPipeline:

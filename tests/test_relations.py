@@ -39,3 +39,17 @@ def test_number_chunks_gui_kem_quan_he_van_ban():
     out = number_chunks([chunk])[0]
     assert "22/2000/QH10" in out["relations"][0]["text"]
     assert number_chunks([{**chunk, "doc_id": "khac"}])[0]["relations"] == []
+
+
+def test_luat_bhxh_cu_bi_thay_the_boi_ban_hop_nhat_2026():
+    from src.pipeline.relations import SUPERSEDED
+    for cu in ("Luat-Bao-hiem-xa-hoi-2014-259700", "luat-bao-hiem-xa-hoi"):
+        assert SUPERSEDED[cu] == "congbao-468972"
+        assert "Hết hiệu lực" in relations_for(cu)[0]["text"]
+    assert "thay thế" in relations_for("congbao-468972")[0]["text"]
+
+
+def test_van_ban_chi_sua_doi_mot_phan_khong_bi_loai_khoi_truy_xuat():
+    from src.pipeline.relations import SUPERSEDED
+    # NĐ 100/2019 chỉ bị NĐ 168 sửa một phần; BLHS 2015 bị Luật 2017 sửa vài điều.
+    assert not set(SUPERSEDED) & {"congbao-43733", "100/2015/QH13", "bo-luat-hinh-su"}

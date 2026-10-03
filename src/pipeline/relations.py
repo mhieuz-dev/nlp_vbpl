@@ -1,8 +1,8 @@
-"""Quan hệ sửa đổi/thay thế đã xác minh cho 7 văn bản dùng trong bộ đánh giá và demo.
+"""Quan hệ sửa đổi/thay thế đã xác minh cho các văn bản dùng trong bộ đánh giá và demo.
 
 Kho không có trường nào nói văn bản nào sửa văn bản nào, nên danh sách này viết
 tay và CHỈ ghi điều đọc được trong chính nội dung văn bản ở kho (xác minh
-29/09/2026, `basis` là điều chứa câu đó). Văn bản không có trong danh sách thì
+29/09/2026, Luật BHXH 03/10/2026, `basis` là điều chứa câu đó). Văn bản không có trong danh sách thì
 giao diện ghi "chưa xác định", không đoán.
 
 Chỉ biết những gì nằm trong kho: một văn bản có thể đã bị sửa bởi văn bản ra
@@ -73,6 +73,36 @@ RELATIONS = [
         }],
     },
 ]
+
+# Luật BHXH: kho có hai bản của Luật 58/2014 (nạp từ UTS_VLC) và VBHN
+# 19/VBHN-VPQH hợp nhất Luật 41/2024/QH15 (Công báo, nạp 03/10/2026).
+_BHXH_CU = {"Luat-Bao-hiem-xa-hoi-2014-259700", "luat-bao-hiem-xa-hoi"}
+_BHXH_MOI = "congbao-468972"
+_BHXH_CAN_CU = "Điều 140 Luật Bảo hiểm xã hội số 41/2024/QH15"
+RELATIONS += [
+    {
+        "doc_ids": {_BHXH_MOI},
+        "relations": [{
+            "text": "Hợp nhất Luật Bảo hiểm xã hội số 41/2024/QH15 (hiệu lực 01/07/2025), "
+                    "thay thế Luật Bảo hiểm xã hội số 58/2014/QH13",
+            "basis": _BHXH_CAN_CU,
+        }],
+    },
+    {
+        "doc_ids": _BHXH_CU,
+        "relations": [{
+            "text": "Hết hiệu lực từ 01/07/2025, thay bằng Luật Bảo hiểm xã hội số 41/2024/QH15",
+            "basis": _BHXH_CAN_CU,
+        }],
+    },
+]
+
+# Văn bản bị thay thế TOÀN BỘ -> văn bản thay thế, cả hai cùng có trong kho.
+# Truy xuất bỏ văn bản cũ đi (src/vectorstore/store.py): để cả hai thì model
+# trộn hai bản, đo thật 03/10 trả "BHXH bắt buộc đủ 20 năm" theo luật 2014 đã
+# hết hiệu lực. Chỉ ghi văn bản bị thay thế toàn bộ đã xác minh bằng điều luật;
+# sửa đổi một phần (như NĐ 168 với NĐ 100) KHÔNG thuộc danh sách này.
+SUPERSEDED = {cu: _BHXH_MOI for cu in _BHXH_CU}
 
 _BY_ID = {doc_id: entry["relations"] for entry in RELATIONS for doc_id in entry["doc_ids"]}
 

@@ -198,3 +198,31 @@ def test_delete_doc_removes_all_its_chunks(meta_store):
     meta_store.insert(chunks)
     assert meta_store.delete_doc("todelete") == 3
     assert meta_store.delete_doc("todelete") == 0
+
+
+def _bhxh(chunk_id, doc_id, text):
+    return {"chunk_id": chunk_id, "doc_id": doc_id, "title": doc_id, "law_type": "law",
+            "text": text, "char_start": 0}
+
+
+def test_query_bo_van_ban_da_bi_thay_the_khi_kho_co_ban_thay_the(tmp_path):
+    """Đo thật 03/10: kho có cả Luật BHXH 2014 lẫn bản hợp nhất 2026 thay thế
+    nó, model trộn hai bản và trả "BHXH bắt buộc đủ 20 năm" theo luật đã hết
+    hiệu lực."""
+    s = VectorStore(embedder=Embedder(), collection_name="test_superseded",
+                    persist_dir=str(tmp_path), superseded={"cu": "moi"})
+    s.insert([
+        _bhxh("cu_0", "cu", "Điều 54. Có đủ 20 năm đóng bảo hiểm xã hội thì được hưởng lương hưu."),
+        _bhxh("moi_0", "moi", "Điều 64. Có từ đủ 15 năm đóng bảo hiểm xã hội thì hưởng lương hưu."),
+    ])
+    got = s.query("đóng bảo hiểm xã hội bao nhiêu năm thì được lương hưu", top_k=5)
+    assert [c["doc_id"] for c in got] == ["moi"]
+
+
+def test_query_giu_van_ban_cu_khi_kho_chua_co_ban_thay_the(tmp_path):
+    """Code deploy trước, kho cập nhật sau: lọc ngay thì câu BHXH hết nguồn."""
+    s = VectorStore(embedder=Embedder(), collection_name="test_superseded_missing",
+                    persist_dir=str(tmp_path), superseded={"cu": "moi"})
+    s.insert([_bhxh("cu_0", "cu", "Điều 54. Có đủ 20 năm đóng bảo hiểm xã hội.")])
+    got = s.query("đóng bảo hiểm xã hội bao nhiêu năm", top_k=5)
+    assert [c["doc_id"] for c in got] == ["cu"]
