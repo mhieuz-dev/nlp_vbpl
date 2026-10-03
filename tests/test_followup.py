@@ -81,3 +81,13 @@ def test_viet_lai_tra_ve_rong_hoac_le_thi_lui_ve_ghep_chuoi():
     # Dài bất thường nghĩa là model kể lể thay vì viết một câu hỏi.
     assert retrieval_query("còn ô tô thì sao?", LICH_SU,
                            condense=lambda q, h: "x" * 500) == ghep
+
+
+def test_dai_tu_chi_dinh_do_ay_la_noi_tiep():
+    # Câu dài, không có từ nối, chỉ trỏ ngược bằng "người đó"/"người lao động
+    # ấy". Từng bị coi là câu độc lập nên không được viết lại: "Nếu người đó
+    # mới 15 tuổi thì có bị truy cứu không?" tìm ra Luật Tư pháp người chưa
+    # thành niên thay vì BLHS.
+    assert is_followup("Nếu người đó mới 15 tuổi thì có bị truy cứu không?")
+    assert is_followup("Nếu người lao động ấy không báo trước thì phải bồi thường gì không?")
+    assert is_followup("Khi đó người sử dụng lao động phải trả trợ cấp gì cho họ?")

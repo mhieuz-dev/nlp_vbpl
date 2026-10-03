@@ -20,6 +20,10 @@ _FOLLOWUP_MARKERS = (
     "còn", "vậy", "thế", "thì sao", "vậy còn", "nếu vậy", "ngược lại",
     "trường hợp này", "trường hợp đó", "cái đó", "cái này", "điều đó",
     "nó", "mức đó", "như vậy", "tương tự", "ngoài ra", "thêm nữa",
+    # Đại từ chỉ định đứng sau danh từ: "người đó", "khi đó", "người lao động
+    # ấy". Thiếu hai chữ này thì câu dài trỏ ngược kiểu "Nếu người đó mới 15
+    # tuổi thì có bị truy cứu không?" bị coi là câu độc lập, không được viết lại.
+    "đó", "ấy",
 )
 
 # Câu ngắn hơn ngưỡng này gần như chắc chắn không đứng một mình được.
