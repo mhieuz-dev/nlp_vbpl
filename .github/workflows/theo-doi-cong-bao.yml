@@ -25,6 +25,9 @@ on:
       types:
         description: "Lọc loại, ví dụ: decree,circular (bỏ trống = lấy tất cả)"
         default: ""
+      sweep:
+        description: "Dò dải id thay cho RSS, ví dụ: 468972 468972 (bỏ trống = RSS)"
+        default: ""
 
 permissions:
   contents: read
@@ -74,8 +77,12 @@ jobs:
         id: do
         run: |
           set -o pipefail
+          # Văn bản ban hành từ trước không còn trong RSS (vd. VBHN Luật BHXH,
+          # id 468972, ngày 12/02/2026) chỉ vào được kho qua dò id chạy tay.
+          SWEEP="${{ github.event.inputs.sweep || '' }}"
+          if [ -n "$SWEEP" ]; then NGUON="--sweep $SWEEP"; else NGUON="--recent"; fi
           python scripts/refresh_corpus.py \
-            --recent \
+            $NGUON \
             --max-docs "${{ github.event.inputs.max_docs || '20' }}" \
             --types "${{ github.event.inputs.types || '' }}" \
             --save-dir van-ban-moi \

@@ -47,6 +47,7 @@ LAW_TYPES = {
 # link đi từ trang số Công báo nhưng không có ở link đi từ trang liệt kê.
 _SLUG_RE = re.compile(r"/van-ban/([a-z\-]+?)-so-[^/]*?-(\d+)(?:/\d+)?\.htm")
 
+_PAGE_SUFFIX_RE = re.compile(r"/\d+\.htm$")
 _ITEM_RE = re.compile(r"<item>(.*?)</item>", re.S)
 _LINK_RE = re.compile(r"<link>\s*(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?\s*</link>", re.S)
 _PUBDATE_RE = re.compile(r"<pubDate>\s*(.*?)\s*</pubDate>", re.S)
@@ -276,6 +277,9 @@ class Crawler:
             raise CrawlBlocked(f"403 khi dò id {doc_id}")
         location = (res.headers or {}).get("location", "")
         if res.status in (301, 302) and parse_slug(location):
+            # Văn bản hợp nhất trỏ tới ".../...-468972/62881.htm", URL đó lại
+            # 302 về bản không đuôi; tải thẳng bản có đuôi thì nhận 302 và ghi lỗi.
+            location = _PAGE_SUFFIX_RE.sub(".htm", location)
             return location if location.startswith("http") else BASE_URL + location
         return None
 

@@ -182,3 +182,15 @@ def test_user_agent_contact_comes_from_env(monkeypatch):
 
     monkeypatch.delenv("CRAWLER_CONTACT", raising=False)
     assert "contact" in congbao.user_agent().lower()
+
+
+def test_resolve_id_bo_duoi_so_trang_cua_van_ban_hop_nhat(tmp_path):
+    """Đo thật 03/10: x-468972 (VBHN 19/VBHN-VPQH, Luật BHXH) trỏ tới
+    ".../...-468972/62881.htm", URL đó lại 302 về bản không đuôi. Giữ đuôi thì
+    tải trang ra 302 và văn bản bị ghi lỗi, không bao giờ vào kho."""
+    url = f"{BASE_URL}/van-ban/van-ban-hop-nhat-so-19-vbhn-vpqh-468972.htm"
+    pages = dict(PAGES)
+    pages[f"{BASE_URL}/van-ban/x-468972.htm"] = Response(
+        302, {"location": "/van-ban/van-ban-hop-nhat-so-19-vbhn-vpqh-468972/62881.htm"}, b"")
+    c = build(tmp_path, fetcher=FakeFetcher(pages))
+    assert c.resolve_id("468972") == url
