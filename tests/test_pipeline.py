@@ -78,3 +78,11 @@ def test_ask_dung_chung_duong_truy_xuat_voi_server():
     assert q.startswith("Xe máy vượt đèn đỏ phạt bao nhiêu? còn ô tô thì sao?")
     assert "đèn tín hiệu giao thông" in q
     pipe.generator.generate.assert_called_once_with("còn ô tô thì sao?", [], history=lich_su)
+
+
+def test_retrieve_nho_cau_truy_van_vua_dung():
+    """Câu viết lại đến từ LLM, gọi lại có thể ra câu khác: phải giữ đúng câu
+    đã dùng để soi lỗi, không gọi search_query lần nữa."""
+    pipe, store = _pipeline()
+    pipe.retrieve("Ô tô vượt đèn đỏ phạt bao nhiêu?")
+    assert pipe.last_query == store.query.call_args.args[0]

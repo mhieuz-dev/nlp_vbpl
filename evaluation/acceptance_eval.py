@@ -67,12 +67,14 @@ def summarize(rows: list[dict]) -> dict:
     return out
 
 
-def _generate(pipeline, item, chunks, wait_s: int):
-    """Gọi model, gặp giới hạn theo phút của Groq thì chờ rồi thử lại."""
+def _retry_429(item, wait_s: int, call):
+    """Gọi model, gặp giới hạn theo phút của Groq thì chờ rồi thử lại.
+
+    Bọc cả retrieve: câu nối tiếp gọi model viết lại câu hỏi ngay trong đó.
+    """
     for _ in range(5):
         try:
-            return pipeline.generator.generate(item["question"], chunks,
-                                               history=item.get("history"))
+            return call()
         except Exception as exc:  # noqa: BLE001 - chỉ nuốt 429, còn lại ném tiếp
             if not is_rate_limited(exc):
                 raise
@@ -84,11 +86,14 @@ def _generate(pipeline, item, chunks, wait_s: int):
 def run(pipeline, items, pause_s: int = 20, wait_s: int = 60) -> list[dict]:
     rows = []
     for i, item in enumerate(items, start=1):
-        chunks = pipeline.retrieve(item["question"], item.get("history"))
-        result = _generate(pipeline, item, chunks, wait_s)
+        chunks = _retry_429(item, wait_s,
+                            lambda: pipeline.retrieve(item["question"], item.get("history")))
+        result = _retry_429(item, wait_s, lambda: pipeline.generator.generate(
+            item["question"], chunks, history=item.get("history")))
         s = score_item(item, chunks, result)
         rows.append({"id": item["id"], "split": item["split"], "kind": item["kind"],
-                     **s, "answer": result.get("answer", "")})
+                     **s, "query": getattr(pipeline, "last_query", None),
+                     "answer": result.get("answer", "")})
         print(f"[{i}/{len(items)}] {item['split']:7} {item['kind']:7} {item['id']:28} "
               + " ".join(f"{m}={'-' if s[m] is None else int(s[m])}" for m in METRICS))
         # Groq free tier: ~8.000 token/phút, mỗi câu tốn ~6.000. Nghỉ để khỏi 429.

@@ -39,6 +39,7 @@ class RAGPipeline:
         self.generator = generator
         self.top_k = top_k
         self.expand_terms = expand_terms
+        self.last_query = None
 
     def search_query(self, question: str, history=None) -> str:
         """Câu đem đi TÌM, khác câu gửi cho model ĐỌC.
@@ -58,7 +59,10 @@ class RAGPipeline:
         cắt TRƯỚC khi đánh số nguồn, để số nguồn model thấy khớp với số nguồn
         hiển thị trên giao diện. fit=False chỉ để bộ đánh giá đo hạng trước khi cắt.
         """
-        chunks = self.store.query(self.search_query(question, history), top_k=self.top_k)
+        # Giữ lại câu đã đem đi tìm: câu viết lại do LLM sinh, gọi lại có thể ra
+        # câu khác, nên muốn biết vì sao một lượt tìm trượt thì phải lưu ngay đây.
+        self.last_query = self.search_query(question, history)
+        chunks = self.store.query(self.last_query, top_k=self.top_k)
         return fit_to_context(chunks) if fit else chunks
 
     def ask(self, question: str, history=None) -> dict:

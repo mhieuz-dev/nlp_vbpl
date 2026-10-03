@@ -97,3 +97,27 @@ def test_bo_de_hop_le_va_co_tap_giu_rieng():
         kinds = {q["kind"] for q in ACCEPTANCE if q["split"] == split}
         assert kinds == {"answer", "clarify", "abstain"}, split
         assert any(q.get("history") for q in ACCEPTANCE if q["split"] == split), split
+
+
+def test_run_cho_roi_thu_lai_khi_truy_xuat_gap_429(monkeypatch):
+    """Bước viết lại câu nối tiếp nằm trong retrieve, cũng có thể gặp 429."""
+    from evaluation import acceptance_eval
+    monkeypatch.setattr(acceptance_eval.time, "sleep", lambda s: None)
+    calls = {"n": 0}
+
+    class Pipe:
+        class generator:
+            @staticmethod
+            def generate(q, chunks, history=None):
+                return {"answer": "KHÔNG_TÌM_THẤY", "citations": [], "answered": False}
+
+        def retrieve(self, q, history=None):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise RuntimeError("Error code: 429 - rate limit")
+            return []
+
+    item = {"id": "x", "split": "dev", "kind": "abstain", "question": "q",
+            "expected": [], "must_contain": []}
+    rows = acceptance_eval.run(Pipe(), [item], pause_s=0, wait_s=0)
+    assert calls["n"] == 2 and rows[0]["id"] == "x"
