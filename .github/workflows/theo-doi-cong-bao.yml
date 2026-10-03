@@ -79,7 +79,10 @@ jobs:
           set -o pipefail
           # Văn bản ban hành từ trước không còn trong RSS (vd. VBHN Luật BHXH,
           # id 468972, ngày 12/02/2026) chỉ vào được kho qua dò id chạy tay.
-          SWEEP="${{ github.event.inputs.sweep || '' }}"
+          # Chỉ giữ chữ số: dán từ chat hay dính dấu cách không ngắt (NBSP), shell
+          # không tách được và argparse thoát mã 2 (lượt #28, 03/10). Một số = một id.
+          SWEEP=$(printf '%s' "${{ github.event.inputs.sweep || '' }}" | tr -cs '0-9' ' ' | xargs)
+          case "$SWEEP" in *" "*) ;; ?*) SWEEP="$SWEEP $SWEEP" ;; esac
           if [ -n "$SWEEP" ]; then NGUON="--sweep $SWEEP"; else NGUON="--recent"; fi
           python scripts/refresh_corpus.py \
             $NGUON \
