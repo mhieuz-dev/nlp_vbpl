@@ -134,6 +134,18 @@ jobs:
           gcloud storage cp "gs://${BUCKET}/corpus/${DATE}.tar.gz" \
                             "gs://${BUCKET}/corpus/current.tar.gz"
           echo "đã đẩy kho $(du -h corpus.tar.gz | cut -f1) lên GCS"
+          # Bản phục vụ cho Cloud Run: cùng kho nhưng bỏ chỉ mục toàn văn và
+          # chỉ mục chuỗi (851 -> 358 MB), vì hệ tệp Cloud Run nằm trong RAM
+          # và bản đầy đủ làm container vượt trần 2 GiB (OOM 21/10/2026).
+          # Làm trên bản sao: current.tar.gz phải giữ đủ để lần sau còn nạp thêm.
+          # Tên serving.tar.gz không khớp mẫu 2*.tar.gz nên lệnh dọn bên dưới
+          # không đụng tới nó.
+          mkdir -p serving
+          cp -r data/chroma_db data/corpus_meta.json serving/
+          python scripts/make_serving_corpus.py serving/chroma_db
+          tar czf serving.tar.gz -C serving chroma_db corpus_meta.json
+          gcloud storage cp serving.tar.gz "gs://${BUCKET}/corpus/serving.tar.gz"
+          echo "đã đẩy bản phục vụ $(du -h serving.tar.gz | cut -f1) lên GCS"
           # Giữ 2 bản theo ngày mới nhất để lùi về khi bản mới hỏng, xoá phần
           # còn lại (mỗi bản ~380 MB, để dồn thì vượt 5 GB free tier). Đếm theo
           # SỐ BẢN chứ không theo tuổi: đợt nghỉ dài không có văn bản mới thì
