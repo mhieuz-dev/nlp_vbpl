@@ -3,6 +3,12 @@
 Hệ thống RAG trả lời câu hỏi pháp luật và **dẫn về đúng điều khoản gốc**, thay vì
 tóm tắt chung chung. Đồ án môn Xử lý ngôn ngữ tự nhiên, UEH.
 
+*A retrieval-augmented question-answering system for Vietnamese law. It answers only from the retrieved legal text, cites the exact article, and refuses when the corpus has no basis. Retrieval reaches Recall@10 = 0.976 on 42 verified questions over 53,338 passages from 699 legal documents.*
+
+<p align="center">
+  <img src=".github/readme/giao-dien.jpg" width="800" alt="Giao diện H2N LAW">
+</p>
+
 ## Cách hoạt động
 
 Câu hỏi được nối thêm thuật ngữ pháp lý khi viết bằng lời đời thường ("vượt đèn
